@@ -29,8 +29,10 @@ e1 f8 98 11 69 d9 8e 94 9b 1e 87 e9 ce 55 28 df
 8c a1 89 0d bf e6 42 68 41 99 2d 0f b0 54 bb 16
 ```
 find.txt
+
 aes의 sbox 상수 그대로 입력
 
 
 https://github.com/kokke/tiny-AES-c
+
 여기에서 받아서 컴파일한 내용 바로 테스트
