@@ -1,41 +1,63 @@
-# Prerequisites
-*.d
+# Visual Studio
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.VC.db
+*.VC.opendb
+*.vscode/
+*.code-workspace
 
-# Compiled Object files
-*.slo
-*.lo
-*.o
-*.obj
-
-# Precompiled Headers
-*.gch
-*.pch
-
-# Linker files
-*.ilk
-
-# Debugger Files
-*.pdb
-
-# Compiled Dynamic libraries
-*.so
-*.dylib
-*.dll
-
-# Fortran module files
-*.mod
-*.smod
-
-# Compiled Static libraries
-*.lai
-*.la
-*.a
-*.lib
-
-# Executables
+# Build results
+[Bb]in/
+[Oo]bj/
 *.exe
-*.out
-*.app
+*.dll
+*.lib
+*.pdb
+*.ipch
+*.log
+*.tlog
+*.lastbuildstate
+*.idb
+*.sdf
+*.opensdf
+*.cache
+*.db
 
-# debug information files
-*.dwo
+# Others
+*.ncb
+*.sbr
+*.scc
+*.tmp
+*.bak
+*.swp
+*.swo
+*.sln
+*.vcxproj.user
+*.vcxproj.filters
+*.vcxproj.*.user
+*.psess
+*.vsp
+*.vspscc
+*.vssscc
+*.v12.suo
+*.pfx
+*.publishsettings
+*.vs/
+
+# CMake
+CMakeFiles/
+CMakeCache.txt
+CMakeScripts/
+Testing/
+Makefile
+cmake_install.cmake
+install_manifest.txt
+
+# Crash dumps
+*.mdmp
+
+# OS/IDE files
+*.DS_Store
+Thumbs.db
