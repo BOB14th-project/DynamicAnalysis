@@ -39,12 +39,11 @@ all: check-deps $(TARGET)
 	@echo ""
 	@echo "$(CYAN)=== 사용법 ===$(NC)"
 	@echo "$(BLUE)실행파일 분석:$(NC) ./$(TARGET) <실행파일> [인자...]"
-	@echo "$(BLUE)PID 분석:$(NC)      ./$(TARGET) --pid <PID>"
 	@echo ""
 	@echo "$(YELLOW)예시:$(NC)"
 	@echo "  ./$(TARGET) /usr/bin/curl https://example.com"
 	@echo "  ./$(TARGET) ./my_crypto_app input.txt"
-	@echo "  ./$(TARGET) --pid 1234"
+	@echo "  ./$(TARGET) /usr/bin/openssl enc -aes-256-cbc -in file.txt"
 
 # 메인 실행파일 빌드
 $(TARGET): $(SOURCES) $(HEADERS)
@@ -88,12 +87,24 @@ check-deps:
 check-agents:
 	@echo "$(BLUE)[*] 에이전트 파일 검증 중...$(NC)"
 	@mkdir -p $(AGENT_DIR)
-	@for agent in generic_crypto_agent.js openssl_agent.js mbedTLS_agent.js libsodium_agent.js gnutls_agent.js windows_cng_agent.js libgcrypt_agent.js; do \
+	@mkdir -p ./agent/windows
+	@for agent in c_cpp_crypto_agent.js openssl_agent.js mbedTLS_agent.js libsodium_agent.js gnutls_agent.js libgcrypt_agent.js; do \
 		if [ ! -f "$(AGENT_DIR)/$$agent" ]; then \
 			echo "$(YELLOW)[!] 에이전트 파일이 없습니다: $(AGENT_DIR)/$$agent$(NC)"; \
 			echo "$(CYAN)    생성 중...$(NC)"; \
 			echo "// $$agent - Auto-generated placeholder" > "$(AGENT_DIR)/$$agent"; \
 			echo "console.log('[$$agent] Loaded');" >> "$(AGENT_DIR)/$$agent"; \
+			echo "// TODO: Implement crypto hooks for this library" >> "$(AGENT_DIR)/$$agent"; \
+		else \
+			echo "$(GREEN)[✓] $$agent$(NC)"; \
+		fi \
+	done
+	@for agent in cng_agent.js cryptoapi_agent.js; do \
+		if [ ! -f "./agent/windows/$$agent" ]; then \
+			echo "$(YELLOW)[!] Windows 에이전트 파일이 없습니다: ./agent/windows/$$agent$(NC)"; \
+			echo "$(CYAN)    생성 중...$(NC)"; \
+			echo "// $$agent - Windows crypto agent placeholder" > "./agent/windows/$$agent"; \
+			echo "console.log('[$$agent] Loaded');" >> "./agent/windows/$$agent"; \
 		else \
 			echo "$(GREEN)[✓] $$agent$(NC)"; \
 		fi \
@@ -112,14 +123,15 @@ clean:
 install: $(TARGET) check-agents
 	@echo "$(YELLOW)[*] 시스템에 설치 중...$(NC)"
 	@sudo mkdir -p $(BINDIR)
-	@sudo mkdir -p $(DATADIR)/agents
+	@sudo mkdir -p $(DATADIR)/agents/c_cpp
+	@sudo mkdir -p $(DATADIR)/agents/windows
 	@sudo cp $(TARGET) $(BINDIR)/
-	@sudo cp $(AGENT_DIR)/*.js $(DATADIR)/agents/
+	@sudo cp $(AGENT_DIR)/*.js $(DATADIR)/agents/c_cpp/ 2>/dev/null || true
+	@sudo cp ./agent/windows/*.js $(DATADIR)/agents/windows/ 2>/dev/null || true
 	@sudo chmod +x $(BINDIR)/$(TARGET)
 	@echo "$(GREEN)[✓] 설치 완료: $(BINDIR)/$(TARGET)$(NC)"
 	@echo "$(BLUE)전역 사용 가능:$(NC)"
 	@echo "  $(TARGET) <실행파일> [인자...]"
-	@echo "  $(TARGET) --pid <PID>"
 
 # === 시스템 제거 ===
 uninstall:
@@ -154,7 +166,7 @@ test: $(TARGET)
 	@echo ""
 	@echo "$(YELLOW)[Test 4] 간단한 바이너리 분석 테스트$(NC)"
 	@if which ls > /dev/null 2>&1; then \
-		timeout 5 ./$(TARGET) /bin/ls -la 2>&1 | grep -q "분석" && \
+		CRYPTO_MONITOR_DURATION=3 timeout 5 ./$(TARGET) /bin/ls -la 2>&1 | grep -q "분석" && \
 		echo "$(GREEN)[✓] 바이너리 실행 테스트 OK$(NC)" || \
 		echo "$(YELLOW)[!] 바이너리 실행 테스트 (경고만)$(NC)"; \
 	fi
@@ -165,7 +177,7 @@ test: $(TARGET)
 example: $(TARGET)
 	@echo "$(PURPLE)=== 예제 실행 ===$(NC)"
 	@echo "$(YELLOW)[1] echo 명령어의 암호화 사용 분석$(NC)"
-	./$(TARGET) /bin/echo "Hello World" || true
+	CRYPTO_MONITOR_DURATION=5 ./$(TARGET) /bin/echo "Hello World" || true
 	@echo ""
 	@if [ -f "crypto_analysis_results.json" ]; then \
 		echo "$(CYAN)결과 파일 생성됨: crypto_analysis_results.json$(NC)"; \
@@ -178,7 +190,7 @@ sandbox: $(TARGET)
 	@echo "$(YELLOW)안전한 테스트를 위한 격리 환경 생성 중...$(NC)"
 	@mkdir -p sandbox_test
 	@cp $(TARGET) sandbox_test/
-	@cp -r $(AGENT_DIR) sandbox_test/
+	@cp -r agent sandbox_test/
 	@echo "$(GREEN)[✓] 샌드박스 생성 완료: ./sandbox_test/$(NC)"
 	@echo "$(CYAN)사용법:$(NC)"
 	@echo "  cd sandbox_test"
@@ -226,7 +238,7 @@ info:
 # === 도움말 ===
 help:
 	@echo "$(BLUE)=== Crypto Dynamic Analysis Orchestrator Makefile ===$(NC)"
-	@echo "$(PURPLE)버전 2.0 - 실행파일 직접 분석 지원$(NC)"
+	@echo "$(PURPLE)버전 2.0 - 바이너리 직접 실행 및 분석$(NC)"
 	@echo ""
 	@echo "$(YELLOW)주요 타겟:$(NC)"
 	@echo "  $(GREEN)make$(NC) 또는 $(GREEN)make all$(NC)     - 일반 빌드"
@@ -258,12 +270,17 @@ help:
 	@echo "   ./$(TARGET) ./my_crypto_app input.dat output.enc"
 	@echo "   ./$(TARGET) /usr/bin/ssh user@server.com"
 	@echo ""
-	@echo "$(YELLOW)3. 기존 프로세스 분석:$(NC)"
-	@echo "   ./$(TARGET) --pid 1234"
+	@echo "$(YELLOW)3. 환경변수 사용:$(NC)"
+	@echo "   CRYPTO_MONITOR_DURATION=120 ./$(TARGET) ./target_app"
+	@echo "   CRYPTO_OUTPUT_FILE=my_result.json ./$(TARGET) /bin/ls"
 	@echo ""
 	@echo "$(YELLOW)4. 시스템 전역 설치:$(NC)"
 	@echo "   sudo make install"
 	@echo "   $(TARGET) /usr/bin/curl https://secure.com"
+	@echo ""
+	@echo "$(CYAN)=== 환경 변수 ===$(NC)"
+	@echo "  • CRYPTO_MONITOR_DURATION - 모니터링 시간 (초, 기본: 60)"
+	@echo "  • CRYPTO_OUTPUT_FILE      - 결과 파일명 (기본: crypto_analysis_results.json)"
 	@echo ""
 	@echo "$(CYAN)=== 필수 의존성 ===$(NC)"
 	@echo "  • frida-core (./frida-core/libfrida-core.a)"
@@ -322,6 +339,26 @@ docker-build:
 	@echo "ENTRYPOINT [\"./crypto_orchestrator\"]" >> Dockerfile
 	docker build -t crypto-orchestrator .
 	@echo "$(GREEN)[✓] Docker 이미지 생성 완료: crypto-orchestrator$(NC)"
+
+# === 암호화 테스트 바이너리 생성 ===
+test-binary:
+	@echo "$(YELLOW)[*] 테스트용 암호화 바이너리 생성 중...$(NC)"
+	@echo '#include <openssl/evp.h>' > test_crypto.c
+	@echo '#include <openssl/rand.h>' >> test_crypto.c
+	@echo '#include <stdio.h>' >> test_crypto.c
+	@echo 'int main() {' >> test_crypto.c
+	@echo '    unsigned char key[32], iv[16];' >> test_crypto.c
+	@echo '    RAND_bytes(key, sizeof(key));' >> test_crypto.c
+	@echo '    RAND_bytes(iv, sizeof(iv));' >> test_crypto.c
+	@echo '    printf("Generated random key and IV\\n");' >> test_crypto.c
+	@echo '    return 0;' >> test_crypto.c
+	@echo '}' >> test_crypto.c
+	@gcc -o test_crypto test_crypto.c -lcrypto 2>/dev/null || \
+		echo "$(YELLOW)[!] OpenSSL 개발 라이브러리가 필요합니다 (libssl-dev)$(NC)"
+	@if [ -f "test_crypto" ]; then \
+		echo "$(GREEN)[✓] 테스트 바이너리 생성: test_crypto$(NC)"; \
+		echo "$(CYAN)테스트: ./$(TARGET) ./test_crypto$(NC)"; \
+	fi
 
 # === 기본 타겟을 all로 설정 ===
 .DEFAULT_GOAL := all
