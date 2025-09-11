@@ -11,6 +11,7 @@
 *.swp
 *.bak
 crypto_orchestrator
+aes_lib
 
 # IDE/에디터 설정
 .vscode/
