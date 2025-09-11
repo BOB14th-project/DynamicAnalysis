@@ -31,3 +31,4 @@ node_modules/
 # 기타 자동 생성 파일
 *.pyc
 __pycache__/
+frida-core/
