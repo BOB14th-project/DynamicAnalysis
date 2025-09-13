@@ -4,6 +4,9 @@ ecc
 
 # 분석 결과
 *.json
+*.csv
+*.ndjson
+*.txt
 
 # Python-generated files
 __pycache__/
