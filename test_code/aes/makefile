@@ -9,18 +9,15 @@ CXXFLAGS=-Wall -O2
 
 
 # Targets
-all: aes.o test_c
-
-
+all: test
 
 aes.o: aes.c aes.h
 	$(CC) $(CFLAGS) -c aes.c -o aes.o
 
-test_c: test.c aes.o aes.h
+test: test.c aes.o aes.h
 	$(CC) $(CFLAGS) -o $@ test.c aes.o
 
-
 clean:
-	rm -f test_c *.o *.obj *.ilk *.pdb *.log
+	rm -f test *.o *.obj *.ilk *.pdb *.log
 
 .PHONY: all clean
