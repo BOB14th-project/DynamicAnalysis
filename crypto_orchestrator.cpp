@@ -1,4 +1,4 @@
-// crypto_orchestrator.cpp - Frida spawn 모드 사용 버전
+// crypto_orchestrator.cpp - Frida spawn 모드 사용 버전 (개선됨)
 #include <iostream>
 #include <vector>
 #include <string>
@@ -24,9 +24,19 @@ private:
     static_analysis_result_t static_result;
     guint spawned_pid;  // Frida spawn으로 생성한 프로세스 PID
     
+    // 에이전트 로딩 모드
+    enum AgentLoadingMode {
+        MODE_SPECIALIZED_ONLY,  // 특화 에이전트만 사용
+        MODE_GENERIC_ONLY,      // 범용 에이전트만 사용
+        MODE_HYBRID            // 특화 + 보조 에이전트 조합
+    };
+    
+    AgentLoadingMode loading_mode;
+    
 public:
     CryptoOrchestrator() : device_manager(nullptr), device(nullptr), 
-                          session(nullptr), spawned_pid(0) {
+                          session(nullptr), spawned_pid(0), 
+                          loading_mode(MODE_SPECIALIZED_ONLY) {
         initializeFrida();
     }
     
@@ -59,19 +69,26 @@ private:
             // 네트워크 도구들도 대부분 OpenSSL 사용
             static_result.detected_libraries[static_result.library_count++] = CRYPTO_LIB_OPENSSL;
             std::cout << "  [탐지] OpenSSL (네트워크 도구)" << std::endl;
+        } else if (binary_path.find("mbedtls") != std::string::npos ||
+                   binary_path.find("mbed") != std::string::npos) {
+            // mbedTLS 사용 추정
+            static_result.detected_libraries[static_result.library_count++] = CRYPTO_LIB_MBEDTLS;
+            std::cout << "  [탐지] mbedTLS" << std::endl;
+        } else if (binary_path.find("sodium") != std::string::npos) {
+            // libsodium 사용 추정
+            static_result.detected_libraries[static_result.library_count++] = CRYPTO_LIB_LIBSODIUM;
+            std::cout << "  [탐지] libsodium" << std::endl;
         } else {
-            // 일반적인 경우 기본 라이브러리들 추가
-            static_result.detected_libraries[static_result.library_count++] = CRYPTO_LIB_OPENSSL;
-            std::cout << "  [탐지] OpenSSL (기본값)" << std::endl;
+            // 일반적인 경우 - 라이브러리를 확실하게 알 수 없음
+            // 범용 에이전트를 사용하도록 설정
+            std::cout << "  [정보] 특정 암호화 라이브러리를 탐지하지 못함" << std::endl;
+            std::cout << "  [정보] 범용 에이전트를 사용합니다" << std::endl;
         }
         
         // 주요 라이브러리 선택
         if (static_result.library_count > 0) {
             static_result.primary_library = static_result.detected_libraries[0];
             std::cout << "  [주요 라이브러리] " << crypto_library_type_to_string(static_result.primary_library) << std::endl;
-        } else {
-            std::cout << "  [경고] 암호화 라이브러리를 탐지하지 못했습니다." << std::endl;
-            std::cout << "  [정보] 런타임에 동적 로딩될 수 있습니다." << std::endl;
         }
     }
     
@@ -112,36 +129,95 @@ private:
         return code;
     }
     
+    // 개선된 에이전트 선택 로직 - 조건부 로딩
     std::vector<std::string> selectAgentFiles() {
         std::vector<std::string> agent_files;
+        bool specialized_agent_found = false;
         
-        // 기본 에이전트 (존재하는 파일 사용)
-        agent_files.push_back("agent/c_cpp_crypto_agent.js");
+        std::cout << "[+] 에이전트 선택 중..." << std::endl;
         
-        // 탐지된 라이브러리에 따라 특화 에이전트 추가
+        // 1. 특화 에이전트 확인
         for (size_t i = 0; i < static_result.library_count; i++) {
             crypto_library_type_t lib = static_result.detected_libraries[i];
             
+            // OpenSSL 계열
             if (lib == CRYPTO_LIB_OPENSSL || 
                 lib == CRYPTO_LIB_LIBSSL || 
-                lib == CRYPTO_LIB_LIBCRYPTO) {
+                lib == CRYPTO_LIB_LIBCRYPTO ||
+                lib == CRYPTO_LIB_BORINGSSL ||
+                lib == CRYPTO_LIB_LIBRESSL) {
+                
                 agent_files.push_back("agent/c_cpp/openssl_agent.js");
-            } else if (lib == CRYPTO_LIB_MBEDTLS) {
+                specialized_agent_found = true;
+                std::cout << "  [선택] OpenSSL 특화 에이전트" << std::endl;
+                break;  // OpenSSL 에이전트만 사용
+            }
+            // mbedTLS
+            else if (lib == CRYPTO_LIB_MBEDTLS) {
                 agent_files.push_back("agent/c_cpp/mbedTLS_agent.js");
-            } else if (lib == CRYPTO_LIB_LIBSODIUM) {
+                specialized_agent_found = true;
+                std::cout << "  [선택] mbedTLS 특화 에이전트" << std::endl;
+                break;
+            }
+            // libsodium
+            else if (lib == CRYPTO_LIB_LIBSODIUM) {
                 agent_files.push_back("agent/c_cpp/libsodium_agent.js");
-            } else if (lib == CRYPTO_LIB_GNUTLS) {
+                specialized_agent_found = true;
+                std::cout << "  [선택] libsodium 특화 에이전트" << std::endl;
+                break;
+            }
+            // GnuTLS
+            else if (lib == CRYPTO_LIB_GNUTLS) {
                 agent_files.push_back("agent/c_cpp/gnutls_agent.js");
-            } else if (lib == CRYPTO_LIB_WIN_CNG) {
+                specialized_agent_found = true;
+                std::cout << "  [선택] GnuTLS 특화 에이전트" << std::endl;
+                break;
+            }
+            // Windows CNG
+            else if (lib == CRYPTO_LIB_WIN_CNG || 
+                     lib == CRYPTO_LIB_WIN_BCRYPT) {
                 agent_files.push_back("agent/windows/cng_agent.js");
-            } else if (lib == CRYPTO_LIB_WIN_CRYPTOAPI) {
+                specialized_agent_found = true;
+                std::cout << "  [선택] Windows CNG 특화 에이전트" << std::endl;
+                break;
+            }
+            // Windows CryptoAPI (레거시)
+            else if (lib == CRYPTO_LIB_WIN_CRYPTOAPI || 
+                     lib == CRYPTO_LIB_WIN_CRYPT32) {
                 agent_files.push_back("agent/windows/cryptoapi_agent.js");
+                specialized_agent_found = true;
+                std::cout << "  [선택] Windows CryptoAPI 특화 에이전트" << std::endl;
+                break;
             }
         }
         
-        // 중복 제거
+        // 2. 특화 에이전트가 없는 경우에만 범용 에이전트 사용
+        if (!specialized_agent_found) {
+            agent_files.push_back("agent/c_cpp_crypto_agent.js");
+            std::cout << "  [선택] 범용 C/C++ 암호화 에이전트" << std::endl;
+            loading_mode = MODE_GENERIC_ONLY;
+        } else {
+            loading_mode = MODE_SPECIALIZED_ONLY;
+        }
+        
+        // 3. 하이브리드 모드 (환경변수로 활성화 가능)
+        const char* hybrid_mode_env = getenv("CRYPTO_HYBRID_MODE");
+        if (hybrid_mode_env && std::string(hybrid_mode_env) == "1") {
+            if (specialized_agent_found) {
+                // 특화 에이전트가 있어도 보조 에이전트 추가
+                agent_files.push_back("agent/auxiliary/memory_agent.js");  // 메모리 추적용
+                agent_files.push_back("agent/auxiliary/file_agent.js");    // 파일 작업 추적용
+                loading_mode = MODE_HYBRID;
+                std::cout << "  [선택] 하이브리드 모드 - 보조 에이전트 추가" << std::endl;
+            }
+        }
+        
+        // 4. 중복 제거 (혹시 모를 중복 방지)
         std::set<std::string> unique_files(agent_files.begin(), agent_files.end());
-        return std::vector<std::string>(unique_files.begin(), unique_files.end());
+        std::vector<std::string> final_files(unique_files.begin(), unique_files.end());
+        
+        std::cout << "[+] 총 " << final_files.size() << "개 에이전트 선택됨" << std::endl;
+        return final_files;
     }
     
     static void messageHandler(FridaScript* script, const gchar* message, 
@@ -164,28 +240,18 @@ private:
             // 타입별 출력 처리
             std::string msg_type = root.get("type", "unknown").asString();
             
-            if (msg_type == "send") {
-                // send() 메시지 처리
-                if (root.isMember("payload")) {
-                    Json::Value payload = root["payload"];
-                    if (payload.isMember("category")) {
-                        std::string category = payload["category"].asString();
-                        std::cout << "[CAPTURE] " << category;
-                        
-                        if (payload.isMember("data")) {
-                            Json::Value data = payload["data"];
-                            if (data.isMember("function")) {
-                                std::cout << " - " << data["function"].asString();
-                            }
-                            if (data.isMember("algorithm")) {
-                                std::cout << " (" << data["algorithm"].asString() << ")";
-                            }
-                        }
-                        std::cout << std::endl;
-                    }
-                }
+            // 에이전트 타입에 따른 구분
+            if (msg_type == "crypto_capture") {
+                // 범용 에이전트 메시지
+                orchestrator->handleGenericMessage(root);
+            } else if (msg_type == "openssl_capture") {
+                // OpenSSL 특화 에이전트 메시지
+                orchestrator->handleOpenSSLMessage(root);
+            } else if (msg_type == "send") {
+                // 레거시 형식 지원
+                orchestrator->handleLegacyMessage(root);
             } else if (msg_type == "log") {
-                // console.log() 메시지는 디버그 모드에서만 출력
+                // 디버그 로그
                 #ifdef DEBUG
                 std::string payload = root.get("payload", "").asString();
                 std::cout << "[LOG] " << payload << std::endl;
@@ -194,6 +260,94 @@ private:
         } else {
             // JSON 파싱 실패시 원본 메시지 출력
             std::cout << "[FRIDA] " << message << std::endl;
+        }
+    }
+    
+    // 범용 에이전트 메시지 처리
+    void handleGenericMessage(const Json::Value& root) {
+        if (root.isMember("category") && root.isMember("data")) {
+            std::string category = root["category"].asString();
+            Json::Value data = root["data"];
+            
+            std::cout << "[GENERIC] " << category;
+            
+            if (category == "algorithm") {
+                if (data.isMember("cipher")) {
+                    std::cout << " - " << data["cipher"].asString();
+                }
+            } else if (category == "key_generation") {
+                if (data.isMember("algorithm") && data.isMember("key_size")) {
+                    std::cout << " - " << data["algorithm"].asString() 
+                             << " (" << data["key_size"].asInt() << " bits)";
+                }
+            } else if (category == "memory_dump") {
+                if (data.isMember("label") && data.isMember("entropy")) {
+                    std::cout << " - " << data["label"].asString() 
+                             << " (entropy: " << data["entropy"].asFloat() << ")";
+                }
+            } else if (category == "timing") {
+                if (data.isMember("function") && data.isMember("duration_ms")) {
+                    std::cout << " - " << data["function"].asString() 
+                             << " (" << data["duration_ms"].asInt() << "ms)";
+                }
+            }
+            
+            std::cout << std::endl;
+        }
+    }
+    
+    // OpenSSL 특화 에이전트 메시지 처리
+    void handleOpenSSLMessage(const Json::Value& root) {
+        if (root.isMember("category") && root.isMember("data")) {
+            std::string category = root["category"].asString();
+            Json::Value data = root["data"];
+            
+            std::cout << "[OPENSSL] " << category;
+            
+            if (category == "cipher_init") {
+                if (data.isMember("cipher")) {
+                    std::cout << " - " << data["cipher"].asString();
+                }
+            } else if (category == "rsa_keygen") {
+                if (data.isMember("key_size_bits")) {
+                    std::cout << " - RSA " << data["key_size_bits"].asInt() << " bits";
+                }
+            } else if (category == "hash_init") {
+                if (data.isMember("algorithm")) {
+                    std::cout << " - " << data["algorithm"].asString();
+                }
+            } else if (category == "memory_dump") {
+                if (data.isMember("label") && data.isMember("appears_random")) {
+                    std::cout << " - " << data["label"].asString();
+                    if (data["appears_random"].asBool()) {
+                        std::cout << " [ENCRYPTED/RANDOM]";
+                    }
+                }
+            }
+            
+            std::cout << std::endl;
+        }
+    }
+    
+    // 레거시 메시지 처리 (이전 버전 호환성)
+    void handleLegacyMessage(const Json::Value& root) {
+        if (root.isMember("payload")) {
+            Json::Value payload = root["payload"];
+            if (payload.isMember("category")) {
+                std::string category = payload["category"].asString();
+                std::cout << "[LEGACY] " << category;
+                
+                if (payload.isMember("data")) {
+                    Json::Value data = payload["data"];
+                    if (data.isMember("function")) {
+                        std::cout << " - " << data["function"].asString();
+                    }
+                    if (data.isMember("algorithm")) {
+                        std::cout << " (" << data["algorithm"].asString() << ")";
+                    }
+                }
+                std::cout << std::endl;
+            }
         }
     }
     
@@ -219,10 +373,6 @@ public:
             }
             frida_spawn_options_set_argv(options, argv, args.size() + 1);
         }
-        
-        // 환경 변수 설정 (필요시)
-        // gchar** envp = g_get_environ();
-        // frida_spawn_options_set_envp(options, envp, g_strv_length(envp));
         
         GError* error = nullptr;
         
@@ -273,6 +423,19 @@ public:
         if (agent_files.empty()) {
             std::cerr << "[-] 로드할 에이전트가 없습니다" << std::endl;
             return false;
+        }
+        
+        // 로딩 모드 출력
+        switch (loading_mode) {
+            case MODE_SPECIALIZED_ONLY:
+                std::cout << "[+] 모드: 특화 에이전트만 사용" << std::endl;
+                break;
+            case MODE_GENERIC_ONLY:
+                std::cout << "[+] 모드: 범용 에이전트만 사용" << std::endl;
+                break;
+            case MODE_HYBRID:
+                std::cout << "[+] 모드: 하이브리드 (특화 + 보조)" << std::endl;
+                break;
         }
         
         for (const auto& filename : agent_files) {
@@ -408,10 +571,13 @@ public:
         Json::Value final_result;
         
         // 분석 메타데이터
-        final_result["metadata"]["version"] = "2.0";
+        final_result["metadata"]["version"] = "2.1";
         final_result["metadata"]["analysis_timestamp"] = std::chrono::duration_cast<std::chrono::seconds>(
             std::chrono::system_clock::now().time_since_epoch()
         ).count();
+        final_result["metadata"]["loading_mode"] = 
+            loading_mode == MODE_SPECIALIZED_ONLY ? "specialized_only" :
+            loading_mode == MODE_GENERIC_ONLY ? "generic_only" : "hybrid";
         
         // 정적 분석 결과
         final_result["static_analysis"]["binary_path"] = static_result.binary_path;
@@ -427,57 +593,54 @@ public:
                 crypto_library_type_to_string(static_result.primary_library);
         }
         
-        // 동적 분석 결과 - 실제 암호화 작업만 필터링
-        final_result["dynamic_analysis"]["captured_operations"] = Json::Value(Json::arrayValue);
-        int crypto_ops_count = 0;
+        // 동적 분석 결과 - 에이전트 타입별로 분류
+        final_result["dynamic_analysis"]["generic_captures"] = Json::Value(Json::arrayValue);
+        final_result["dynamic_analysis"]["openssl_captures"] = Json::Value(Json::arrayValue);
+        final_result["dynamic_analysis"]["other_captures"] = Json::Value(Json::arrayValue);
+        
+        int generic_count = 0, openssl_count = 0, other_count = 0;
         
         for (const auto& data : captured_data) {
-            // send 타입이고 crypto_capture 카테고리인 것만 저장
-            if (data.get("type", "").asString() == "send") {
+            std::string msg_type = data.get("type", "").asString();
+            
+            if (msg_type == "crypto_capture") {
+                final_result["dynamic_analysis"]["generic_captures"].append(data);
+                generic_count++;
+            } else if (msg_type == "openssl_capture") {
+                final_result["dynamic_analysis"]["openssl_captures"].append(data);
+                openssl_count++;
+            } else if (msg_type == "send") {
+                // 레거시 형식 처리
                 if (data.isMember("payload")) {
                     Json::Value payload = data["payload"];
-                    if (payload.get("type", "").asString() == "crypto_capture" &&
-                        payload.get("category", "").asString() != "process_info") {
-                        final_result["dynamic_analysis"]["captured_operations"].append(payload);
-                        crypto_ops_count++;
+                    if (payload.get("type", "").asString() == "crypto_capture") {
+                        final_result["dynamic_analysis"]["other_captures"].append(payload);
+                        other_count++;
                     }
                 }
             }
         }
         
-        // 요약 통계
-        final_result["summary"]["total_operations"] = crypto_ops_count;
-        final_result["summary"]["agents_loaded"] = static_cast<int>(active_scripts.size());
-        final_result["summary"]["libraries_detected"] = static_cast<int>(static_result.library_count);
+        // 로드된 에이전트 정보
+        final_result["agents_loaded"] = Json::Value(Json::arrayValue);
+        for (size_t i = 0; i < active_scripts.size(); i++) {
+            final_result["agents_loaded"].append(
+                loading_mode == MODE_SPECIALIZED_ONLY ? "specialized_agent" :
+                loading_mode == MODE_GENERIC_ONLY ? "generic_agent" : 
+                "hybrid_agent_" + std::to_string(i)
+            );
+        }
         
-        // 암호화 알고리즘 통계
-        std::map<std::string, int> algo_stats;
-        std::map<std::string, int> category_stats;
-        
-        for (const auto& op : captured_data) {
-            if (op.get("type", "").asString() == "send" && op.isMember("payload")) {
-                Json::Value payload = op["payload"];
-                if (payload.isMember("data") && payload["data"].isMember("algorithm")) {
-                    algo_stats[payload["data"]["algorithm"].asString()]++;
-                }
-                if (payload.isMember("category")) {
-                    std::string cat = payload["category"].asString();
-                    if (cat != "process_info") {
-                        category_stats[cat]++;
-                    }
-                }
+        // 간단한 카운터만 제공 (통계 분석은 제거)
+        int event_count = 0;
+        for (const auto& data : captured_data) {
+            std::string msg_type = data.get("type", "").asString();
+            if (msg_type == "crypto_capture" || msg_type == "openssl_capture") {
+                event_count++;
             }
         }
         
-        final_result["summary"]["algorithm_usage"] = Json::Value(Json::objectValue);
-        for (const auto& pair : algo_stats) {
-            final_result["summary"]["algorithm_usage"][pair.first] = pair.second;
-        }
-        
-        final_result["summary"]["category_distribution"] = Json::Value(Json::objectValue);
-        for (const auto& pair : category_stats) {
-            final_result["summary"]["category_distribution"][pair.first] = pair.second;
-        }
+        final_result["metadata"]["crypto_events_count"] = event_count;
         
         // 파일 저장
         std::ofstream file(output_file);
@@ -489,15 +652,20 @@ public:
             file.close();
             
             std::cout << "[+] 결과 저장 완료: " << output_file << std::endl;
-            std::cout << "[+] 총 캡처된 암호화 작업: " << crypto_ops_count << "개" << std::endl;
+            std::cout << "[+] 총 캡처된 이벤트: " << captured_data.size() << "개" << std::endl;
+            std::cout << "[+] 암호화 관련 이벤트: " << event_count << "개" << std::endl;
             
-            // 간단한 요약 출력
-            if (!algo_stats.empty()) {
-                std::cout << "[+] 사용된 알고리즘:" << std::endl;
-                for (const auto& pair : algo_stats) {
-                    std::cout << "    - " << pair.first << ": " << pair.second << "회" << std::endl;
-                }
+            // 에이전트 타입 정보만 출력
+            if (loading_mode == MODE_SPECIALIZED_ONLY) {
+                std::cout << "[+] 사용된 에이전트: 특화 에이전트" << std::endl;
+            } else if (loading_mode == MODE_GENERIC_ONLY) {
+                std::cout << "[+] 사용된 에이전트: 범용 에이전트" << std::endl;
+            } else if (loading_mode == MODE_HYBRID) {
+                std::cout << "[+] 사용된 에이전트: 하이브리드 (특화 + 보조)" << std::endl;
             }
+            
+            std::cout << "[+] 모든 원시 데이터가 저장되었습니다." << std::endl;
+            std::cout << "[+] 후처리 분석을 위해 raw_captures 필드를 사용하세요." << std::endl;
         } else {
             std::cerr << "[-] 파일 저장 실패: " << output_file << std::endl;
         }
@@ -543,12 +711,18 @@ int main(int argc, char* argv[]) {
         std::cerr << "  " << argv[0] << " /usr/bin/wget https://example.com" << std::endl;
         std::cerr << "  " << argv[0] << " ./my_crypto_app input.txt" << std::endl;
         std::cerr << "  " << argv[0] << " /usr/bin/openssl enc -aes-256-cbc -in file.txt -out file.enc" << std::endl;
+        std::cerr << std::endl;
+        std::cerr << "환경변수:" << std::endl;
+        std::cerr << "  CRYPTO_MONITOR_DURATION=120  # 모니터링 시간 (초)" << std::endl;
+        std::cerr << "  CRYPTO_OUTPUT_FILE=result.json  # 결과 파일명" << std::endl;
+        std::cerr << "  CRYPTO_HYBRID_MODE=1  # 하이브리드 모드 활성화" << std::endl;
         return 1;
     }
     
     try {
         std::cout << "==========================================" << std::endl;
-        std::cout << "   암호화 동적분석 Orchestrator v2.0     " << std::endl;
+        std::cout << "   암호화 동적분석 Orchestrator v2.1     " << std::endl;
+        std::cout << "      (조건부 에이전트 로딩 적용)        " << std::endl;
         std::cout << "==========================================" << std::endl;
         std::cout << std::endl;
         
