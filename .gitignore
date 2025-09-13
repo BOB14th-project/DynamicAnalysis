@@ -1,33 +1,28 @@
-# 컴파일, 분석 결과물과 임시 추가 테스트용 파일
-crypto_orchestrator
+# test
 aes_lib
-crypto_analysis_results.json
+ecc
 
-# 빌드 결과물 및 임시 파일
+# 분석 결과
+*.json
+
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# cpp test code
+*.exe
+*.out
 *.o
 *.obj
-*.exe
 *.dll
-*.so
-*.a
-*.out
-*.log
-*.tmp
-*.swp
-*.bak
 
-# IDE/에디터 설정
-.vscode/
-*.suo
-*.user
 
-# Mac/Windows 시스템 파일
-.DS_Store
-Thumbs.db
 
-# node.js 관련 (향후 필요시)
-node_modules/
 
-# 기타 자동 생성 파일
-*.pyc
-__pycache__/
