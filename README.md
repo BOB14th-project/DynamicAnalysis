@@ -42,7 +42,7 @@ python3 filter_trace.py analysis_result_aes_lib.json
     - EVP_CipherInit_ex: 암호화 컨텍스트 초기화 함수의 모든 파라미터 캡처
     - EVP_EncryptUpdate: 실제 암호화 수행 함수의 입출력 데이터 캡처
     - 포인터 주소, 데이터 길이, 실제 데이터 값 모두 추출
-- 완전한 암호화 과정 추적
+- 암호화 과정 추적
     - 1479번: 32바이트 AES-256 키 + 16바이트 IV로 암호화 컨텍스트 초기화  
     - 1481번: "Hello, AES encryption with OpenSSL!" 텍스트를 실제 암호화 (ASCII로 변환하면 원본 텍스트 복원됨)  
 - OpenSSL EVP API의 전체 암호화 워크플로우 추적됨
@@ -65,7 +65,7 @@ agent.js에서 필터링하지 않으면 모든 함수의 정보를 가져오며
 - 데이터 길이 정보
 - 메모리 영역 분류 (코드/데이터/스칼라)
 
-3. 암호화 특화 정보 (업계 최고 수준)
+3. 암호화 특화 정보
 - OpenSSL EVP API 상세 분석
 - 암호화 컨텍스트 내부 구조
 - 키/IV/평문/암호문 실제 데이터
