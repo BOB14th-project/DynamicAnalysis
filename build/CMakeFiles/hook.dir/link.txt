@@ -1,0 +1,1 @@
+/usr/bin/c++ -fPIC -shared -Wl,-soname,libhook.so -o libhook.so CMakeFiles/hook.dir/src/init.cpp.o CMakeFiles/hook.dir/src/log.cpp.o CMakeFiles/hook.dir/src/resolver.cpp.o CMakeFiles/hook.dir/src/hooks/foo_hook.cpp.o CMakeFiles/hook.dir/src/hooks/openssl_hooks.cpp.o CMakeFiles/hook.dir/src/utils/get_key.cpp.o  -ldl -lpthread /usr/lib/x86_64-linux-gnu/libcrypto.so 

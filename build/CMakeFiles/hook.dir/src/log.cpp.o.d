@@ -1,0 +1,11 @@
+CMakeFiles/hook.dir/src/log.cpp.o: \
+ /mnt/d/git/Hooking_linux_LD_PRELOAD/src/log.cpp \
+ /usr/include/stdc-predef.h \
+ /mnt/d/git/Hooking_linux_LD_PRELOAD/include/log.h \
+ /usr/lib/gcc/x86_64-linux-gnu/13/include/stddef.h \
+ /mnt/d/git/Hooking_linux_LD_PRELOAD/include/hook_common.h \
+ /usr/include/string.h \
+ /usr/include/x86_64-linux-gnu/bits/libc-header-start.h \
+ /usr/include/features.h \
+ /usr/include/x86_64-linux-gnu/bits/types/locale_t.h \
+ /usr/include/strings.h /usr/lib/gcc/x86_64-linux-gnu/13/include/stdarg.h
