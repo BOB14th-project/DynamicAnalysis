@@ -42,9 +42,56 @@ void log_key_and_len(EVP_CIPHER_CTX* ctx, const EVP_CIPHER* type, const unsigned
     int klen = get_effective_keylen(ctx,type);
     if (key && klen > 0){
         char klen_str[64];
-        int len = snprintf(klen_str, sizeof(klen_str), "[HOOK] keylen: %d bits\n",klen*8);
+        int len = std::snprintf(klen_str, sizeof(klen_str), "[HOOK] keylen: %d bits\n",klen*8);
         (void)!write(STDERR_FILENO, klen_str, len);
         (void)!write(STDERR_FILENO, "[HOOK] key: ",12);
         dump_hex_stderr(key, klen);
     }
 }
+
+#if OPENSSL_VERSION_NUMBER >= 0x30000000L
+#include <openssl/params.h>
+#include <openssl/core_names.h>
+
+void log_key_iv_from_params(const OSSL_PARAM* params){
+    if(!params) return;
+    // IV
+    if(const OSSL_PARAM* piv = OSSL_PARAM_locate_const(params, OSSL_CIPHER_PARAM_IV)) {
+        if (piv->data && piv->data_size > 0){
+            (void)!write(2, "[HOOK] key (params): ",22);
+            dump_hex_stderr(reinterpret_cast<const unsigned char*>(piv->data), (int)piv->data_size);
+        }
+    }
+    // IV 길이 (있으면 정보용)
+    if (const OSSL_PARAM* pl = OSSL_PARAM_locate_const(params, OSSL_CIPHER_PARAM_IVLEN)) {
+        size_t ivlen = 0;
+        if (OSSL_PARAM_get_size_t(pl, &ivlen)) {
+            char line[64];
+            int n = std::snprintf(line, sizeof(line),
+                                  "[HOOK] ivlen (params): %zu bytes\n", ivlen);
+            (void)!write(2, line, (size_t)n);
+        }
+    }
+
+    // AEAD 태그(복호 시 제공될 수 있음)
+    if (const OSSL_PARAM* ptag = OSSL_PARAM_locate_const(params, OSSL_CIPHER_PARAM_AEAD_TAG)) {
+        if (ptag->data && ptag->data_size > 0) {
+            (void)!write(2, "[HOOK] aead tag (params): ", 26);
+            dump_hex_stderr(reinterpret_cast<const unsigned char*>(ptag->data),
+                            static_cast<int>(ptag->data_size));
+        }
+    }
+
+    // (참고) 키 길이는 KEYLEN으로 올 수 있지만 키 바이트는 params에 오지 않음
+    if (const OSSL_PARAM* pklen = OSSL_PARAM_locate_const(params, OSSL_CIPHER_PARAM_KEYLEN)) {
+        size_t klen = 0;
+        if (OSSL_PARAM_get_size_t(pklen, &klen)) {
+            char line[64];
+            int n = std::snprintf(line, sizeof(line),
+                                  "[HOOK] keylen (params): %zu bytes (%zu bits)\n",
+                                  klen, klen * 8);
+            (void)!write(2, line, (size_t)n);
+        }
+    }
+}
+#endif

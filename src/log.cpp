@@ -1,5 +1,4 @@
 // log.cpp
-#define _GNU_SOURCE
 #include "pch.h"
 #include "log.h"
 #include "hook_common.h"

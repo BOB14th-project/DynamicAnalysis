@@ -1,5 +1,4 @@
 // resolver.cpp
-#define _GNU_SOURCE
 #include "pch.h"
 #include "resolver.h"
 #include "hook_common.h"
