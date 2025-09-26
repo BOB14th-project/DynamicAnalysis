@@ -76,7 +76,7 @@ LD_BIND_NOW=1 HOOK_VERBOSE=1 LD_PRELOAD=... ./your_program
   "api": "EVP_EncryptInit_ex",
   "dir": "enc",
   "cipher": "AES-256-CBC",
-  "key": "ae9eb3be65da2aa4a8f723c483ba2f4e0b4a941748de5659a20f2305f889eaaa",
+  "key": "ae9eb3be65da2aa4a8f723c483ba2f4e0b4a941748de5659a20f2305f88aeaaa",
   "keylen": 32
 }
 ```
