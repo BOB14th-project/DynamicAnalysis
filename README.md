@@ -70,11 +70,13 @@ LD_BIND_NOW=1 HOOK_VERBOSE=1 LD_PRELOAD=... ./your_program
 ## 출력 구조
 ```
 {
-    Detection_id: int, // 분석 번호
-    File_id: int,  // 파일 번호
-    Parameter: int,
-    Algorithm_name: VARCHAR,
-    Api: VARCHAR,
-    Key_length: int
+  "ts": "2025-09-26T11:45:18.882Z",
+  "pid": 5191,
+  "tid": 5191,
+  "api": "EVP_EncryptInit_ex",
+  "dir": "enc",
+  "cipher": "AES-256-CBC",
+  "key": "ae9eb3be65da2aa4a8f723c483ba2f4e0b4a941748de5659a20f2305f889ea82",
+  "keylen": 32
 }
 ```
