@@ -37,9 +37,10 @@ add_executable(aes_lib_test   tests/aes_lib_test.cpp)
 add_executable(demo_target    tests/demo_target.cpp)
 add_executable(ecc_ECIES_test tests/ecc_ECIES_test.cpp)
 add_executable(ecc_sign_test  tests/ecc_sign_test.cpp)
+add_executable(openssl3_ex2_test tests/openssl3_ex2_test.cpp)
 
 # 테스트 타깃에도 PCH 적용(원치 않으면 삭제)
-foreach(tgt IN ITEMS aes_lib_test demo_target ecc_ECIES_test ecc_sign_test)
+foreach(tgt IN ITEMS aes_lib_test demo_target ecc_ECIES_test ecc_sign_test openssl3_ex2_test)
   target_precompile_headers(${tgt} PRIVATE ${CMAKE_SOURCE_DIR}/include/pch.h)
 endforeach()
 
@@ -47,6 +48,7 @@ endforeach()
 target_link_libraries(aes_lib_test   PRIVATE OpenSSL::Crypto)
 target_link_libraries(ecc_ECIES_test PRIVATE OpenSSL::Crypto)
 target_link_libraries(ecc_sign_test  PRIVATE OpenSSL::Crypto)
+target_link_libraries(openssl3_ex2_test PRIVATE OpenSSL::Crypto)  
 # demo_target이 OpenSSL을 안 쓰면 아래 줄은 유지하지 않아도 됨
 # target_link_libraries(demo_target    PRIVATE OpenSSL::Crypto)
 
