@@ -1,6 +1,6 @@
 // get_key.cpp
 #include "pch.h"
-#include "get_key.h"
+#include "crypto_utils.h"
 
 // OpenSSL/LibreSSL 버전별 안전한 키 길이 얻기
 int get_effective_keylen(EVP_CIPHER_CTX* ctx, const EVP_CIPHER* type) {
@@ -30,8 +30,21 @@ void dump_hex_stderr(const unsigned char* p, int n) {
     if (!p || n <= 0) return;
     char buf[3]; // 2 hex + NUL
     for (int i = 0; i < n; ++i) {
-        int m = snprintf(buf, sizeof(buf), "%02x", p[i]);
+        int m = std::snprintf(buf, sizeof(buf), "%02x", p[i]);
         (void)!write(STDERR_FILENO, buf, (size_t)m);
     }
     (void)!write(STDERR_FILENO, "\n", 1);
+}
+
+
+void log_key_and_len(EVP_CIPHER_CTX* ctx, const EVP_CIPHER* type, const unsigned char* key){
+    if (!ctx && !type) return; // 둘 다 없다면 스킵
+    int klen = get_effective_keylen(ctx,type);
+    if (key && klen > 0){
+        char klen_str[64];
+        int len = snprintf(klen_str, sizeof(klen_str), "[HOOK] keylen: %d bits\n",klen*8);
+        (void)!write(STDERR_FILENO, klen_str, len);
+        (void)!write(STDERR_FILENO, "[HOOK] key: ",12);
+        dump_hex_stderr(key, klen);
+    }
 }

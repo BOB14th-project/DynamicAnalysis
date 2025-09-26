@@ -25,7 +25,7 @@ set(HOOK_SRCS
     src/resolver.cpp
     src/hooks/foo_hook.cpp
     src/hooks/openssl_hooks.cpp
-    src/utils/get_key.cpp          # ← 여기로 이동 반영
+    src/utils/crypto_utils.cpp    
 )
 
 add_library(hook SHARED ${HOOK_SRCS})

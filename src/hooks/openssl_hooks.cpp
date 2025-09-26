@@ -3,8 +3,10 @@
 #include "hook_common.h"
 #include "log.h"
 #include "resolver.h"
-#include "get_key.h"
+#include "crypto_utils.h"
 #include <openssl/evp.h>
+
+typedef struct engine_st ENGINE;
 
 // use function pointer
 using evp_init_ex = int(*)(EVP_CIPHER_CTX*, const EVP_CIPHER*, ENGINE*,
@@ -22,13 +24,7 @@ extern "C" int EVP_EncryptInit_ex(EVP_CIPHER_CTX* ctx,
         if (!real_EVP_EncryptInit_ex) return 0;
     }
 
-    int klen = get_effective_keylen(ctx,type);
-
-    if (key && klen > 0) {
-
-        (void)!write(STDERR_FILENO, "[HOOK] key: ", 12);
-        dump_hex_stderr(key, klen);
-    }
+    log_key_and_len(ctx, type, key);
 
     return real_EVP_EncryptInit_ex(ctx, type, impl, key, iv);
 }
