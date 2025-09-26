@@ -1,3 +1,6 @@
+#output
+*.ndjson
+
 # --- Build artifacts (CMake / Make)
 build/
 cmake-build-*/

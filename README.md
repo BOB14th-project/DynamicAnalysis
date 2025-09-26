@@ -28,7 +28,16 @@ cmake --build build -j
 
 2. hook 주입
 ```
+# NDJSON 경로 지정 + 후킹 주입
+# open은 부모경로를 만들어주지 않는다 필요시 폴더 미리 만들고 경로지정
+export HOOK_NDJSON="$PWD/hook.ndjson"
 HOOK_VERBOSE=1 LD_PRELOAD=$PWD/build/libhook.so ./build/aes_lib_test
+
+# 확인
+ls -l "$HOOK_NDJSON"
+tail -n 10 hook.ndjson | jq .
+# 또는 파싱
+jq . hook.ndjson
 ```
 
 ## 결과
@@ -57,3 +66,15 @@ LD_BIND_NOW=1 HOOK_VERBOSE=1 LD_PRELOAD=... ./your_program
 ```
 - 훅 함수는 반드시 extern "C"(C 링크)를 유지해야 합니다(이름 맹글링 방지)
 - 로깅은 printf 대신 write(2) 기반을 사용하여 훅 재귀 위험 줄임
+
+## 출력 구조
+```
+{
+    Detection_id: int, // 분석 번호
+    File_id: int,  // 파일 번호
+    Parameter: int,
+    Algorithm_name: VARCHAR,
+    Api: VARCHAR,
+    Key_length: int
+}
+```

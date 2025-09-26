@@ -7,7 +7,12 @@ int get_effective_keylen(EVP_CIPHER_CTX* ctx, const EVP_CIPHER* type);
 // key dump
 void dump_hex_stderr(const unsigned char* p, int n);
 // print log key and length
-void log_key_and_len(EVP_CIPHER_CTX* ctx, const EVP_CIPHER* type, const unsigned char* key);
+void log_key_and_len(const char* api,
+                     const char* direction,
+                     EVP_CIPHER_CTX* ctx,
+                     const EVP_CIPHER* type,
+                     const unsigned char* key);
+
 
 #if OPENSSL_VERSION_NUMBER >= 0x300000
 #include <openssl/params.h>

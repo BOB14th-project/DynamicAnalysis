@@ -1,6 +1,7 @@
 // get_key.cpp
 #include "pch.h"
 #include "crypto_utils.h"
+#include "output.h"        // ndjson_log_detection
 
 // OpenSSL/LibreSSL 버전별 안전한 키 길이 얻기
 int get_effective_keylen(EVP_CIPHER_CTX* ctx, const EVP_CIPHER* type) {
@@ -37,17 +38,47 @@ void dump_hex_stderr(const unsigned char* p, int n) {
 }
 
 
-void log_key_and_len(EVP_CIPHER_CTX* ctx, const EVP_CIPHER* type, const unsigned char* key){
-    if (!ctx && !type) return; // 둘 다 없다면 스킵
-    int klen = get_effective_keylen(ctx,type);
-    if (key && klen > 0){
-        char klen_str[64];
-        int len = std::snprintf(klen_str, sizeof(klen_str), "[HOOK] keylen: %d bits\n",klen*8);
-        (void)!write(STDERR_FILENO, klen_str, len);
-        (void)!write(STDERR_FILENO, "[HOOK] key: ",12);
+static inline const EVP_CIPHER* pick_cipher(EVP_CIPHER_CTX* ctx, const EVP_CIPHER* type) {
+#if OPENSSL_VERSION_NUMBER >= 0x30000000L
+    return type ? type : (ctx ? EVP_CIPHER_CTX_get0_cipher(ctx) : nullptr);
+#else
+    return type ? type : (ctx ? EVP_CIPHER_CTX_cipher(ctx) : nullptr);
+#endif
+}
+static inline const char* cipher_name(const EVP_CIPHER* c) {
+#if OPENSSL_VERSION_NUMBER >= 0x30000000L
+    return c ? EVP_CIPHER_get0_name(c) : nullptr;
+#else
+    return c ? EVP_CIPHER_name(c) : nullptr;
+#endif
+}
+
+void log_key_and_len(const char* api,
+                     const char* direction,
+                     EVP_CIPHER_CTX* ctx,
+                     const EVP_CIPHER* type,
+                     const unsigned char* key)
+{
+    const EVP_CIPHER* c = pick_cipher(ctx, type);
+    const char* cname = cipher_name(c);
+    const int klen = get_effective_keylen(ctx, type);
+
+    // 사람이 보는 stderr
+    if (key && klen > 0) {
+        char buf[96];
+        int n = std::snprintf(buf, sizeof(buf),
+                              "[HOOK] %s%s%s keylen: %d bits\n",
+                              api ? api : "", direction ? " " : "",
+                              direction ? direction : "", klen*8);
+        (void)!write(STDERR_FILENO, buf, (size_t)n);
+        (void)!write(STDERR_FILENO, "[HOOK] key: ", 12);
         dump_hex_stderr(key, klen);
     }
+
+    // NDJSON (키 바이트를 그대로 기록)
+    ndjson_log_key_event(api, direction, cname, key, klen, /*iv*/nullptr, 0, /*tag*/nullptr, 0);
 }
+
 
 #if OPENSSL_VERSION_NUMBER >= 0x30000000L
 #include <openssl/params.h>

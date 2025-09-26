@@ -23,9 +23,7 @@ extern "C" int EVP_EncryptInit_ex(EVP_CIPHER_CTX* ctx,
         real_EVP_EncryptInit_ex = (evp_init_ex)resolve_next_symbol("EVP_EncryptInit_ex");
         if (!real_EVP_EncryptInit_ex) return 0;
     }
-
-    log_key_and_len(ctx, type, key);
-
+    log_key_and_len("EVP_EncryptInit_ex", "enc", ctx, type, key);
     return real_EVP_EncryptInit_ex(ctx, type, impl, key, iv);
 }
 
@@ -39,7 +37,7 @@ extern "C" int EVP_CipherInit_ex(EVP_CIPHER_CTX* ctx, const EVP_CIPHER* type, EN
         real_EVP_CipherInit_ex = (evp_cipher_init_ex)resolve_next_symbol("EVP_CipherInit_ex");
         if (!real_EVP_CipherInit_ex) return 0;
     }
-    log_key_and_len(ctx, type, key);
+    log_key_and_len("EVP_CipherInit_ex", enc ? "enc" : "dec", ctx, type, key);
     return real_EVP_CipherInit_ex(ctx, type, impl, key, iv, enc);
 }
 
@@ -53,7 +51,7 @@ extern "C" int EVP_DecryptInit_ex(EVP_CIPHER_CTX* ctx, const EVP_CIPHER* type,
         real_EVP_DecryptInit_ex = (evp_decrypt_init_ex)resolve_next_symbol("EVP_DecryptInit_ex");
         if (!real_EVP_DecryptInit_ex) return 0;
     }
-    log_key_and_len(ctx, type, key);
+    log_key_and_len("EVP_DecryptInit_ex", "dec", ctx, type, key);
     return real_EVP_DecryptInit_ex(ctx, type, impl, key, iv);
 }
 
@@ -73,7 +71,7 @@ extern "C" int EVP_EncryptInit_ex2(EVP_CIPHER_CTX* ctx, const EVP_CIPHER* type,
         if (!real_EVP_EncryptInit_ex2) return 0;
     }
     // key/iv 인자로도 오고, params로도 올 수 있음 → 둘 다 로깅
-    log_key_and_len(ctx, type, key);
+    log_key_and_len("EVP_EncryptInit_ex2", "enc", ctx, type, key);
     //log_key_iv_from_params(params);
     return real_EVP_EncryptInit_ex2(ctx, type, key, iv, params);
 }
@@ -90,7 +88,7 @@ extern "C" int EVP_DecryptInit_ex2(EVP_CIPHER_CTX* ctx, const EVP_CIPHER* type,
         real_EVP_DecryptInit_ex2 = (evp_decrypt_init_ex2)resolve_next_symbol("EVP_DecryptInit_ex2");
         if (!real_EVP_DecryptInit_ex2) return 0;
     }
-    log_key_and_len(ctx, type, key);
+    log_key_and_len("EVP_DecryptInit_ex2", "dec", ctx, type, key);
     //log_key_iv_from_params(params);
     return real_EVP_DecryptInit_ex2(ctx, type, key, iv, params);
 }
@@ -107,7 +105,7 @@ extern "C" int EVP_CipherInit_ex2(EVP_CIPHER_CTX* ctx, const EVP_CIPHER* type,
         real_EVP_CipherInit_ex2 = (evp_cipher_init_ex2)resolve_next_symbol("EVP_CipherInit_ex2");
         if (!real_EVP_CipherInit_ex2) return 0;
     }
-    log_key_and_len(ctx, type, key);
+    log_key_and_len("EVP_CipherInit_ex2", enc ? "enc" : "dec", ctx, type, key);
     //log_key_iv_from_params(params);
     return real_EVP_CipherInit_ex2(ctx, type, key, iv, enc, params);
 }

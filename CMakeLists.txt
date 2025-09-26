@@ -26,6 +26,7 @@ set(HOOK_SRCS
     src/hooks/foo_hook.cpp
     src/hooks/openssl_hooks.cpp
     src/utils/crypto_utils.cpp    
+    src/utils/output.cpp    
 )
 
 add_library(hook SHARED ${HOOK_SRCS})
