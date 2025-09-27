@@ -92,6 +92,7 @@ void log_key_and_len(const char* api,
     }
 
     // NDJSON (키 바이트를 그대로 기록)
+    ndjson_log_key_event("openssl",api, direction, cname, key, klen, /*iv*/nullptr, 0, /*tag*/nullptr, 0);
     const char* api_prefix = is_java_process ? "java_openssl" : api;
     const char* dir_prefix = is_java_process ? "java" : direction;
     ndjson_log_key_event(api_prefix, dir_prefix, cname, key, klen, /*iv*/nullptr, 0, /*tag*/nullptr, 0);

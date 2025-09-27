@@ -5,6 +5,7 @@ project(ldpreload_hook LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 add_compile_definitions(_GNU_SOURCE)
 
 # 아웃풋 디렉토리 정리
@@ -15,9 +16,20 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 # 헤더 경로
 include_directories(${CMAKE_SOURCE_DIR}/include)
 
-# OpenSSL (훅/테스트에서 사용)
+# OpenSSL 필요 (openssl 훅/테스트)
 find_package(OpenSSL REQUIRED)
 
+# ── 빌드 옵션
+option(ENABLE_AF_ALG      "Build AF_ALG hook (Linux kernel crypto sockets)" ON)
+option(ENABLE_CRYPTODEV   "Build cryptodev hook (ioctl-based)"              OFF)
+option(HOOK_VERBOSE       "Verbose logging inside hooks"                    OFF)
+option(HOOK_MASK          "Mask key/iv/tag in NDJSON (hash/trunc)"          OFF)
+
+if(HOOK_VERBOSE)
+  add_compile_definitions(HOOK_VERBOSE=1)
+endif()
+if(HOOK_MASK)
+  add_compile_definitions(HOOK_MASK=1)
 # Java JNI 지원 (선택적)
 find_package(JNI)
 if(JNI_FOUND)
@@ -51,6 +63,7 @@ endif()
 
 add_library(hook SHARED ${HOOK_SRCS})
 target_precompile_headers(hook PRIVATE ${CMAKE_SOURCE_DIR}/include/pch.h)
+target_compile_options(hook PRIVATE -O2 -fPIC -fno-omit-frame-pointer -Wall -Wextra)
 target_link_libraries(hook PRIVATE dl pthread OpenSSL::Crypto)
 
 # Java 지원이 가능한 경우 JNI 라이브러리 링크
