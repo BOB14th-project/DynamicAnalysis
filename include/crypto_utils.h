@@ -13,6 +13,9 @@ void log_key_and_len(const char* api,
                      const EVP_CIPHER* type,
                      const unsigned char* key);
 
+// general crypto event logging (HMAC, PBKDF2, RSA, ECDH, etc.)
+void log_crypto_event(const char* api, const char* direction, const char* algorithm, 
+                      const unsigned char* key_data, int key_len);
 
 #if OPENSSL_VERSION_NUMBER >= 0x300000
 #include <openssl/params.h>
