@@ -1,7 +1,10 @@
-// get_key.cpp
+// crypto_utils.cpp
 #include "pch.h"
 #include "crypto_utils.h"
-#include "output.h"        // ndjson_log_detection
+#include "output.h"
+#ifdef JAVA_SUPPORT_ENABLED
+#include "elf_analyzer.h"
+#endif
 
 // OpenSSL/LibreSSL 버전별 안전한 키 길이 얻기
 int get_effective_keylen(EVP_CIPHER_CTX* ctx, const EVP_CIPHER* type) {
@@ -25,6 +28,8 @@ int get_effective_keylen(EVP_CIPHER_CTX* ctx, const EVP_CIPHER* type) {
     return c ? EVP_CIPHER_key_length(c) : 0;
 #endif
 }
+
+#define STDERR_FD STDERR_FILENO
 
 // key dump
 void dump_hex_stderr(const unsigned char* p, int n) {
@@ -53,6 +58,30 @@ static inline const char* cipher_name(const EVP_CIPHER* c) {
 #endif
 }
 
+namespace {
+
+static bool is_java_crypto_context() {
+#ifdef JAVA_SUPPORT_ENABLED
+    static int cached = -1;
+    if (cached < 0) {
+        cached = (is_jvm_process() || detect_jvm_libraries()) ? 1 : 0;
+    }
+    return cached != 0;
+#else
+    return false;
+#endif
+}
+
+static const char* surface_for_openssl() {
+    return is_java_crypto_context() ? "java_openssl" : "openssl";
+}
+
+static const char* stderr_prefix() {
+    return is_java_crypto_context() ? "[JAVA]" : "[HOOK]";
+}
+
+} // namespace
+
 void log_key_and_len(const char* api,
                      const char* direction,
                      EVP_CIPHER_CTX* ctx,
@@ -63,86 +92,64 @@ void log_key_and_len(const char* api,
     const char* cname = cipher_name(c);
     const int klen = get_effective_keylen(ctx, type);
 
-    // Java 프로세스 탐지
-    int is_java_process = 0;
-    FILE* maps = fopen("/proc/self/maps", "r");
-    if (maps) {
-        char line[1024];
-        while (fgets(line, sizeof(line), maps)) {
-            if (strstr(line, "java") || strstr(line, "jvm") || strstr(line, "libjvm")) {
-                is_java_process = 1;
-                break;
-            }
-        }
-        fclose(maps);
-    }
+    const char* surface = surface_for_openssl();
+    const char* prefix = stderr_prefix();
 
     // 사람이 보는 stderr
     if (key && klen > 0) {
         char buf[128];
         int n = std::snprintf(buf, sizeof(buf),
-                              "[%s] %s%s%s keylen: %d bits\n",
-                              is_java_process ? "JAVA-OPENSSL" : "HOOK",
+                              "%s %s%s%s keylen: %d bits\n",
+                              prefix,
                               api ? api : "", direction ? " " : "",
-                              direction ? direction : "", klen*8);
+                              direction ? direction : "", klen * 8);
         (void)!write(STDERR_FILENO, buf, (size_t)n);
-        (void)!write(STDERR_FILENO, is_java_process ? "[JAVA-OPENSSL] key: " : "[HOOK] key: ", 
-                     is_java_process ? 20 : 12);
+        char key_header[64];
+        int kh = std::snprintf(key_header, sizeof(key_header), "%s key: ", prefix);
+        (void)!write(STDERR_FILENO, key_header, (size_t)kh);
         dump_hex_stderr(key, klen);
     }
 
     // NDJSON (키 바이트를 그대로 기록)
-    ndjson_log_key_event("openssl",api, direction, cname, key, klen, /*iv*/nullptr, 0, /*tag*/nullptr, 0);
-    const char* api_prefix = is_java_process ? "java_openssl" : api;
-    const char* dir_prefix = is_java_process ? "java" : direction;
-    ndjson_log_key_event(api_prefix, dir_prefix, cname, key, klen, /*iv*/nullptr, 0, /*tag*/nullptr, 0);
+    ndjson_log_key_event(surface, api, direction, cname,
+                         key, klen,
+                         /*iv*/nullptr, 0,
+                         /*tag*/nullptr, 0);
 }
 
 
 // 일반적인 암호화 이벤트 로깅 함수 (HMAC, PBKDF2, RSA, ECDH 등)
 void log_crypto_event(const char* api, const char* direction, const char* algorithm, 
                       const unsigned char* key_data, int key_len) {
-    // Java 프로세스 탐지
-    int is_java_process = 0;
-    FILE* maps = fopen("/proc/self/maps", "r");
-    if (maps) {
-        char line[1024];
-        while (fgets(line, sizeof(line), maps)) {
-            if (strstr(line, "java") || strstr(line, "jvm") || strstr(line, "libjvm")) {
-                is_java_process = 1;
-                break;
-            }
-        }
-        fclose(maps);
-    }
+    const char* surface = surface_for_openssl();
+    const char* prefix = stderr_prefix();
 
     // 사람이 보는 stderr 로깅
     if (key_data && key_len > 0) {
         char buf[256];
         int n = std::snprintf(buf, sizeof(buf),
-                              "[%s] %s %s %s keylen: %d bytes (%d bits)\n",
-                              is_java_process ? "JAVA-OPENSSL" : "HOOK",
+                              "%s %s %s %s keylen: %d bytes (%d bits)\n",
+                              prefix,
                               api ? api : "", direction ? direction : "", 
                               algorithm ? algorithm : "", key_len, key_len*8);
         (void)!write(STDERR_FILENO, buf, (size_t)n);
-        (void)!write(STDERR_FILENO, is_java_process ? "[JAVA-OPENSSL] key: " : "[HOOK] key: ", 
-                     is_java_process ? 20 : 12);
+        char key_header[64];
+        int kh = std::snprintf(key_header, sizeof(key_header), "%s key: ", prefix);
+        (void)!write(STDERR_FILENO, key_header, (size_t)kh);
         dump_hex_stderr(key_data, key_len);
     } else {
         char buf[256];
         int n = std::snprintf(buf, sizeof(buf),
-                              "[%s] %s %s %s\n",
-                              is_java_process ? "JAVA-OPENSSL" : "HOOK",
+                              "%s %s %s %s\n",
+                              prefix,
                               api ? api : "", direction ? direction : "", 
                               algorithm ? algorithm : "");
         (void)!write(STDERR_FILENO, buf, (size_t)n);
     }
 
     // NDJSON 로깅
-    const char* api_prefix = is_java_process ? "java_openssl" : api;
-    const char* dir_prefix = is_java_process ? "java" : direction;
-    ndjson_log_key_event(api_prefix, dir_prefix, algorithm, key_data, key_len, 
-                          /*iv*/nullptr, 0, /*tag*/nullptr, 0);
+    ndjson_log_key_event(surface, api, direction, algorithm, key_data, key_len,
+                         /*iv*/nullptr, 0, /*tag*/nullptr, 0);
 }
 
 #if OPENSSL_VERSION_NUMBER >= 0x30000000L
@@ -151,10 +158,13 @@ void log_crypto_event(const char* api, const char* direction, const char* algori
 
 void log_key_iv_from_params(const OSSL_PARAM* params){
     if(!params) return;
+    const char* prefix = stderr_prefix();
     // IV
     if(const OSSL_PARAM* piv = OSSL_PARAM_locate_const(params, OSSL_CIPHER_PARAM_IV)) {
         if (piv->data && piv->data_size > 0){
-            (void)!write(2, "[HOOK] key (params): ",22);
+            char head[64];
+            int n = std::snprintf(head, sizeof(head), "%s key (params): ", prefix);
+            (void)!write(STDERR_FD, head, (size_t)n);
             dump_hex_stderr(reinterpret_cast<const unsigned char*>(piv->data), (int)piv->data_size);
         }
     }
@@ -164,15 +174,17 @@ void log_key_iv_from_params(const OSSL_PARAM* params){
         if (OSSL_PARAM_get_size_t(pl, &ivlen)) {
             char line[64];
             int n = std::snprintf(line, sizeof(line),
-                                  "[HOOK] ivlen (params): %zu bytes\n", ivlen);
-            (void)!write(2, line, (size_t)n);
+                                  "%s ivlen (params): %zu bytes\n", prefix, ivlen);
+            (void)!write(STDERR_FD, line, (size_t)n);
         }
     }
 
     // AEAD 태그(복호 시 제공될 수 있음)
     if (const OSSL_PARAM* ptag = OSSL_PARAM_locate_const(params, OSSL_CIPHER_PARAM_AEAD_TAG)) {
         if (ptag->data && ptag->data_size > 0) {
-            (void)!write(2, "[HOOK] aead tag (params): ", 26);
+            char head[64];
+            int n = std::snprintf(head, sizeof(head), "%s aead tag (params): ", prefix);
+            (void)!write(STDERR_FD, head, (size_t)n);
             dump_hex_stderr(reinterpret_cast<const unsigned char*>(ptag->data),
                             static_cast<int>(ptag->data_size));
         }
@@ -184,9 +196,9 @@ void log_key_iv_from_params(const OSSL_PARAM* params){
         if (OSSL_PARAM_get_size_t(pklen, &klen)) {
             char line[64];
             int n = std::snprintf(line, sizeof(line),
-                                  "[HOOK] keylen (params): %zu bytes (%zu bits)\n",
-                                  klen, klen * 8);
-            (void)!write(2, line, (size_t)n);
+                                  "%s keylen (params): %zu bytes (%zu bits)\n",
+                                  prefix, klen, klen * 8);
+            (void)!write(STDERR_FD, line, (size_t)n);
         }
     }
 }

@@ -1,5 +1,5 @@
 // socket/bind/setsockopt/sendmsg IV
-// hooks/af_alg.cpp
+// hooks/hook_af_alg.cpp
 #include "pch.h"
 #include "output.h"
 #include "resolver.h"

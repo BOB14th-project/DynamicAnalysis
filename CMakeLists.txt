@@ -30,6 +30,7 @@ if(HOOK_VERBOSE)
 endif()
 if(HOOK_MASK)
   add_compile_definitions(HOOK_MASK=1)
+endif()
 # Java JNI 지원 (선택적)
 find_package(JNI)
 if(JNI_FOUND)
@@ -45,20 +46,35 @@ set(HOOK_SRCS
     src/init.cpp
     src/log.cpp
     src/resolver.cpp
-    src/hooks/foo_hook.cpp
-    src/hooks/openssl_hooks.cpp
-    src/utils/crypto_utils.cpp    
-    src/utils/output.cpp    
+    src/utils/crypto_utils.cpp
+    src/utils/output.cpp
     src/utils/elf_analyzer.cpp
 )
 
-# Java 지원이 가능한 경우 Java 관련 소스 추가
-if(JNI_FOUND)
+if(UNIX)
     list(APPEND HOOK_SRCS
-        src/hooks/jni_hooks.cpp
-        src/hooks/java_native_crypto_hooks.cpp
-        src/utils/java_crypto_utils.cpp
+        src/Linux/hooks/hook_openssl_core.cpp
+        src/Linux/hooks/hook_openssl_provider.cpp
+        src/Linux/hooks/hook_openssl_ecc.cpp
     )
+
+    if(ENABLE_AF_ALG)
+        list(APPEND HOOK_SRCS src/Linux/hooks/hook_af_alg.cpp)
+    endif()
+
+    if(ENABLE_CRYPTODEV)
+        list(APPEND HOOK_SRCS src/Linux/hooks/hook_cryptodev.cpp)
+    endif()
+
+    if(JNI_FOUND)
+        list(APPEND HOOK_SRCS
+        src/Linux/hooks/hook_jni.cpp
+        src/Linux/hooks/hook_java_native_crypto.cpp
+            src/utils/java_crypto_utils.cpp
+        )
+    endif()
+else()
+    message(WARNING "Non-Linux builds currently include only platform-agnostic sources")
 endif()
 
 add_library(hook SHARED ${HOOK_SRCS})
@@ -71,18 +87,38 @@ if(JNI_FOUND)
     target_link_libraries(hook PRIVATE ${JNI_LIBRARIES})
 endif()
 
-# ── 핵심 테스트 실행파일들
-add_executable(demo_target    tests/demo_target.cpp)
-add_executable(aes_lib_test   tests/aes_lib_test.cpp)
+# ── OpenSSL 테스트 (암호화 경로별 커버리지)
+add_executable(demo_target                  tests/openssl/demo/demo_target.cpp)
+add_executable(aes_lib_test                 tests/openssl/symmetric/aes_lib_test.cpp)
+add_executable(symm_aes_gcm_test            tests/openssl/aead/symm_aes_gcm_test.cpp)
+add_executable(ecc_sign_test                tests/openssl/ecc/ecc_sign_test.cpp)
+add_executable(ecc_ECIES_test               tests/openssl/ecc/ecc_ECIES_test.cpp)
+add_executable(openssl3_ex2_test            tests/openssl/provider/openssl3_ex2_test.cpp)
+add_executable(openssl3_ex2_params_test     tests/openssl/provider/openssl3_ex2_params_test.cpp)
+
+# ── 동적 분석 CLI (LD_PRELOAD 주입 자동화)
+add_executable(dynamic_analysis_cli src/main.cpp src/dynamic_analysis.cpp)
+
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS "9")
+    target_link_libraries(dynamic_analysis_cli PRIVATE stdc++fs)
+endif()
 
 # Java 지원이 가능한 경우 Java 테스트 추가
 if(JNI_FOUND)
-    add_executable(java_process_detector tests/java_process_detector.cpp)
+    add_executable(java_process_detector tests/java/linux/java_process_detector.cpp)
     target_link_libraries(java_process_detector PRIVATE dl)
 endif()
 
 # 테스트 타깃에도 PCH 적용
-set(TEST_TARGETS demo_target aes_lib_test)
+set(TEST_TARGETS
+    demo_target
+    aes_lib_test
+    symm_aes_gcm_test
+    ecc_sign_test
+    ecc_ECIES_test
+    openssl3_ex2_test
+    openssl3_ex2_params_test
+    dynamic_analysis_cli)
 if(JNI_FOUND)
     list(APPEND TEST_TARGETS java_process_detector)
 endif()
@@ -91,8 +127,17 @@ foreach(tgt IN LISTS TEST_TARGETS)
   target_precompile_headers(${tgt} PRIVATE ${CMAKE_SOURCE_DIR}/include/pch.h)
 endforeach()
 
-# OpenSSL 필요한 테스트에 링크
-target_link_libraries(aes_lib_test   PRIVATE OpenSSL::Crypto)
+set(OPENSSL_CRYPTO_TARGETS
+    aes_lib_test
+    symm_aes_gcm_test
+    ecc_sign_test
+    ecc_ECIES_test
+    openssl3_ex2_test
+    openssl3_ex2_params_test)
+
+foreach(tgt IN LISTS OPENSSL_CRYPTO_TARGETS)
+    target_link_libraries(${tgt} PRIVATE OpenSSL::Crypto)
+endforeach()
 
 # ── 사용 힌트
 message(STATUS "Build:  cmake -S . -B build && cmake --build build -j")

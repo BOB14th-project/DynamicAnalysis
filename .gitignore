@@ -1,5 +1,6 @@
 #output
 *.ndjson
+logs/
 
 # --- Build artifacts (CMake / Make)
 build/
@@ -76,3 +77,7 @@ __pycache__/
 *.pem
 *.key
 *.crt
+
+
+# Temporary files
+AGENTS.md

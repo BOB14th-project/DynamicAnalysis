@@ -1,8 +1,8 @@
-// jni_hooks.cpp  
+// hook_jni.cpp
 #include "pch.h"
 
 #ifdef JAVA_SUPPORT_ENABLED
-#include "jni_hooks.h"
+#include "hook_jni.h"
 #include "java_crypto_utils.h"
 #include "resolver.h"
 #include "hook_common.h"

@@ -1,4 +1,4 @@
-// java_process_detector.cpp - Java 프로세스 탐지 도구
+// java_process_detector.cpp - Java 프로세스 탐지 도구 (Linux 전용)
 #include <iostream>
 #include <string>
 #include <vector>
