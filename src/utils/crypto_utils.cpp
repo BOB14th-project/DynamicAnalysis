@@ -76,7 +76,7 @@ void log_key_and_len(const char* api,
     }
 
     // NDJSON (키 바이트를 그대로 기록)
-    ndjson_log_key_event(api, direction, cname, key, klen, /*iv*/nullptr, 0, /*tag*/nullptr, 0);
+    ndjson_log_key_event("openssl",api, direction, cname, key, klen, /*iv*/nullptr, 0, /*tag*/nullptr, 0);
 }
 
 

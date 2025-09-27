@@ -58,56 +58,47 @@ extern "C" int EVP_DecryptInit_ex(EVP_CIPHER_CTX* ctx, const EVP_CIPHER* type,
 #if OPENSSL_VERSION_NUMBER >= 0x30000000L
 #include <openssl/params.h>
 
-using evp_encrypt_init_ex2 = int(*)(EVP_CIPHER_CTX*, const EVP_CIPHER*,
-                                    const unsigned char* /*key*/, const unsigned char* /*iv*/,
-                                    const OSSL_PARAM* /*params*/);
+using evp_encrypt_init_ex2 = int(*)(EVP_CIPHER_CTX*, const EVP_CIPHER*, const OSSL_PARAM*);
 static evp_encrypt_init_ex2 real_EVP_EncryptInit_ex2 = nullptr;
 
 extern "C" int EVP_EncryptInit_ex2(EVP_CIPHER_CTX* ctx, const EVP_CIPHER* type,
-                                   const unsigned char* key, const unsigned char* iv,
                                    const OSSL_PARAM* params) {
     if (!real_EVP_EncryptInit_ex2) {
         real_EVP_EncryptInit_ex2 = (evp_encrypt_init_ex2)resolve_next_symbol("EVP_EncryptInit_ex2");
         if (!real_EVP_EncryptInit_ex2) return 0;
     }
-    // key/iv 인자로도 오고, params로도 올 수 있음 → 둘 다 로깅
-    log_key_and_len("EVP_EncryptInit_ex2", "enc", ctx, type, key);
-    //log_key_iv_from_params(params);
-    return real_EVP_EncryptInit_ex2(ctx, type, key, iv, params);
+    // 전통 경로처럼 key/iv 포인터가 없으므로, params를 파싱해야 함
+    // log_key_and_len("EVP_EncryptInit_ex2", "enc", ctx, type, /*key=*/nullptr); // 메타만
+    log_params_from_ossl("EVP_EncryptInit_ex2.params", ctx, params); // 아래 2번 참고
+    return real_EVP_EncryptInit_ex2(ctx, type, params);
 }
 
-using evp_decrypt_init_ex2 = int(*)(EVP_CIPHER_CTX*, const EVP_CIPHER*,
-                                    const unsigned char*, const unsigned char*,
-                                    const OSSL_PARAM*);
+using evp_decrypt_init_ex2 = int(*)(EVP_CIPHER_CTX*, const EVP_CIPHER*, const OSSL_PARAM*);
 static evp_decrypt_init_ex2 real_EVP_DecryptInit_ex2 = nullptr;
 
 extern "C" int EVP_DecryptInit_ex2(EVP_CIPHER_CTX* ctx, const EVP_CIPHER* type,
-                                   const unsigned char* key, const unsigned char* iv,
                                    const OSSL_PARAM* params) {
     if (!real_EVP_DecryptInit_ex2) {
         real_EVP_DecryptInit_ex2 = (evp_decrypt_init_ex2)resolve_next_symbol("EVP_DecryptInit_ex2");
         if (!real_EVP_DecryptInit_ex2) return 0;
     }
-    log_key_and_len("EVP_DecryptInit_ex2", "dec", ctx, type, key);
-    //log_key_iv_from_params(params);
-    return real_EVP_DecryptInit_ex2(ctx, type, key, iv, params);
+    // log_key_and_len("EVP_DecryptInit_ex2", "dec", ctx, type, nullptr);
+    log_params_from_ossl("EVP_DecryptInit_ex2.params", ctx, params);
+    return real_EVP_DecryptInit_ex2(ctx, type, params);
 }
 
-using evp_cipher_init_ex2 = int(*)(EVP_CIPHER_CTX*, const EVP_CIPHER*,
-                                   const unsigned char*, const unsigned char*,
-                                   int /*enc*/, const OSSL_PARAM*);
+using evp_cipher_init_ex2 = int(*)(EVP_CIPHER_CTX*, const EVP_CIPHER*, const OSSL_PARAM*);
 static evp_cipher_init_ex2 real_EVP_CipherInit_ex2 = nullptr;
 
 extern "C" int EVP_CipherInit_ex2(EVP_CIPHER_CTX* ctx, const EVP_CIPHER* type,
-                                  const unsigned char* key, const unsigned char* iv,
-                                  int enc, const OSSL_PARAM* params) {
+                                  const OSSL_PARAM* params) {
     if (!real_EVP_CipherInit_ex2) {
         real_EVP_CipherInit_ex2 = (evp_cipher_init_ex2)resolve_next_symbol("EVP_CipherInit_ex2");
         if (!real_EVP_CipherInit_ex2) return 0;
     }
-    log_key_and_len("EVP_CipherInit_ex2", enc ? "enc" : "dec", ctx, type, key);
-    //log_key_iv_from_params(params);
-    return real_EVP_CipherInit_ex2(ctx, type, key, iv, enc, params);
+    // log_key_and_len("EVP_CipherInit_ex2", enc ? "enc" : "dec", ctx, type, nullptr); // enc 정보는 params에서 판단 어려움
+    log_params_from_ossl("EVP_CipherInit_ex2.params", ctx, params);
+    return real_EVP_CipherInit_ex2(ctx, type, params);
 }
 #endif
 

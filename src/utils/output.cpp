@@ -77,7 +77,8 @@ static void _ctor_ndjson(void) { ndjson_init_from_env(); }
 __attribute__((destructor))
 static void _dtor_ndjson(void) { ndjson_close(); }
 
-void ndjson_log_key_event(const char* api,
+void ndjson_log_key_event(const char* surface,
+                          const char* api,
                           const char* direction,
                           const char* cipher_name,
                           const unsigned char* key, int keylen,
@@ -87,12 +88,14 @@ void ndjson_log_key_event(const char* api,
     if (g_fd < 0) return;
 
     char line[4096]; size_t off = 0;
-    char ts[40]; iso8601_utc(ts, sizeof(ts));
+    char ts[64]; iso8601_utc(ts, sizeof(ts));
     pid_t pid = getpid(), tid = get_tid();
 
     off += snprintf(line+off, sizeof(line)-off,
-        "{\"ts\":\"%s\",\"pid\":%d,\"tid\":%d,\"api\":\"", ts, (int)pid, (int)tid);
-    json_escape_append(line, sizeof(line), &off, api ? api : "");
+        "{\"ts\":\"%s\",\"pid\":%d,\"tid\":%d,\"surface\":\"", ts, (int)pid, (int)tid);
+        json_escape_append(line, sizeof(line), &off, surface ? surface : "");
+    off += snprintf(line+off, sizeof(line)-off, "\",\"api\":\"");
+        json_escape_append(line, sizeof(line), &off, api ? api : "");
     off += snprintf(line+off, sizeof(line)-off, "\",\"dir\":\"");
     json_escape_append(line, sizeof(line), &off, direction ? direction : "");
     off += snprintf(line+off, sizeof(line)-off, "\"");
