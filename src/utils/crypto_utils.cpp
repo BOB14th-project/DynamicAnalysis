@@ -63,22 +63,86 @@ void log_key_and_len(const char* api,
     const char* cname = cipher_name(c);
     const int klen = get_effective_keylen(ctx, type);
 
+    // Java 프로세스 탐지
+    int is_java_process = 0;
+    FILE* maps = fopen("/proc/self/maps", "r");
+    if (maps) {
+        char line[1024];
+        while (fgets(line, sizeof(line), maps)) {
+            if (strstr(line, "java") || strstr(line, "jvm") || strstr(line, "libjvm")) {
+                is_java_process = 1;
+                break;
+            }
+        }
+        fclose(maps);
+    }
+
     // 사람이 보는 stderr
     if (key && klen > 0) {
-        char buf[96];
+        char buf[128];
         int n = std::snprintf(buf, sizeof(buf),
-                              "[HOOK] %s%s%s keylen: %d bits\n",
+                              "[%s] %s%s%s keylen: %d bits\n",
+                              is_java_process ? "JAVA-OPENSSL" : "HOOK",
                               api ? api : "", direction ? " " : "",
                               direction ? direction : "", klen*8);
         (void)!write(STDERR_FILENO, buf, (size_t)n);
-        (void)!write(STDERR_FILENO, "[HOOK] key: ", 12);
+        (void)!write(STDERR_FILENO, is_java_process ? "[JAVA-OPENSSL] key: " : "[HOOK] key: ", 
+                     is_java_process ? 20 : 12);
         dump_hex_stderr(key, klen);
     }
 
     // NDJSON (키 바이트를 그대로 기록)
-    ndjson_log_key_event(api, direction, cname, key, klen, /*iv*/nullptr, 0, /*tag*/nullptr, 0);
+    const char* api_prefix = is_java_process ? "java_openssl" : api;
+    const char* dir_prefix = is_java_process ? "java" : direction;
+    ndjson_log_key_event(api_prefix, dir_prefix, cname, key, klen, /*iv*/nullptr, 0, /*tag*/nullptr, 0);
 }
 
+
+// 일반적인 암호화 이벤트 로깅 함수 (HMAC, PBKDF2, RSA, ECDH 등)
+void log_crypto_event(const char* api, const char* direction, const char* algorithm, 
+                      const unsigned char* key_data, int key_len) {
+    // Java 프로세스 탐지
+    int is_java_process = 0;
+    FILE* maps = fopen("/proc/self/maps", "r");
+    if (maps) {
+        char line[1024];
+        while (fgets(line, sizeof(line), maps)) {
+            if (strstr(line, "java") || strstr(line, "jvm") || strstr(line, "libjvm")) {
+                is_java_process = 1;
+                break;
+            }
+        }
+        fclose(maps);
+    }
+
+    // 사람이 보는 stderr 로깅
+    if (key_data && key_len > 0) {
+        char buf[256];
+        int n = std::snprintf(buf, sizeof(buf),
+                              "[%s] %s %s %s keylen: %d bytes (%d bits)\n",
+                              is_java_process ? "JAVA-OPENSSL" : "HOOK",
+                              api ? api : "", direction ? direction : "", 
+                              algorithm ? algorithm : "", key_len, key_len*8);
+        (void)!write(STDERR_FILENO, buf, (size_t)n);
+        (void)!write(STDERR_FILENO, is_java_process ? "[JAVA-OPENSSL] key: " : "[HOOK] key: ", 
+                     is_java_process ? 20 : 12);
+        dump_hex_stderr(key_data, key_len);
+    } else {
+        char buf[256];
+        int n = std::snprintf(buf, sizeof(buf),
+                              "[%s] %s %s %s\n",
+                              is_java_process ? "JAVA-OPENSSL" : "HOOK",
+                              api ? api : "", direction ? direction : "", 
+                              algorithm ? algorithm : "");
+        (void)!write(STDERR_FILENO, buf, (size_t)n);
+    }
+
+    // NDJSON 로깅
+    const char* api_prefix = is_java_process ? "java_openssl" : api;
+    const char* dir_prefix = is_java_process ? "java" : direction;
+    ndjson_log_key_event(api_prefix, dir_prefix, algorithm, key_data, key_len, 
+                          /*iv*/nullptr, 0, /*tag*/nullptr, 0);
+}
 
 #if OPENSSL_VERSION_NUMBER >= 0x30000000L
 #include <openssl/params.h>
