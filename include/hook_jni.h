@@ -1,4 +1,4 @@
-// jni_hooks.h
+// hook_jni.h
 #pragma once
 
 #ifdef JAVA_SUPPORT_ENABLED

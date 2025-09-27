@@ -186,7 +186,11 @@ void log_java_crypto_operation(const char* operation, const char* algorithm,
                               const unsigned char* key_data, int key_len,
                               const unsigned char* iv_data, int iv_len) {
     // NDJSON 형식으로 로깅
-    ndjson_log_key_event(operation, "java", algorithm, key_data, key_len, iv_data, iv_len, nullptr, 0);
+    const char* op = operation ? operation : "java_op";
+    ndjson_log_key_event("java", op, "java", algorithm,
+                         key_data, key_len,
+                         iv_data, iv_len,
+                         nullptr, 0);
 }
 
 // 암호화 관련 클래스인지 확인

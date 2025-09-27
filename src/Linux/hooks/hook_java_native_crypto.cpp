@@ -1,4 +1,4 @@
-// java_native_crypto_hooks.cpp - Java 네이티브 암호화 함수 후킹
+// hook_java_native_crypto.cpp - Java 네이티브 암호화 함수 후킹
 #include "pch.h"
 
 #ifdef JAVA_SUPPORT_ENABLED
@@ -107,9 +107,9 @@ extern "C" void Java_com_sun_crypto_provider_AESCrypt_implInit(JNIEnv* env, jobj
             write(STDERR_FILENO, "\n", 1);
             
             // NDJSON 로그에 기록
-            ndjson_log_key_event("Java_AES_init", "java_enc", "AES", 
-                                (const unsigned char*)key_bytes, keylen, 
-                                nullptr, 0, nullptr, 0);
+            ndjson_log_key_event("java", "Java_AES_init", "java_enc", "AES",
+                                 (const uint8_t*)key_bytes, keylen,
+                                 nullptr, 0, nullptr, 0);
             
             env->ReleaseByteArrayElements(key, key_bytes, JNI_ABORT);
         }
@@ -141,9 +141,9 @@ extern "C" void Java_com_sun_crypto_provider_DESCrypt_implInit(JNIEnv* env, jobj
             write(STDERR_FILENO, log_msg, n);
             
             // NDJSON 로그에 기록
-            ndjson_log_key_event("Java_DES_init", "java_enc", "DES", 
-                                (const unsigned char*)key_bytes, keylen, 
-                                nullptr, 0, nullptr, 0);
+            ndjson_log_key_event("java", "Java_DES_init", "java_enc", "DES",
+                                 (const uint8_t*)key_bytes, keylen,
+                                 nullptr, 0, nullptr, 0);
             
             env->ReleaseByteArrayElements(key, key_bytes, JNI_ABORT);
         }
