@@ -126,3 +126,91 @@ extern "C" int EVP_CIPHER_CTX_set_key_length(EVP_CIPHER_CTX* ctx, int keylen) {
     (void)!write(2, buf, (size_t)n);
     return real_EVP_CIPHER_CTX_set_key_length(ctx, keylen);
 }
+
+// HMAC 함수 훅
+#include <openssl/hmac.h>
+using hmac_fn = unsigned char*(*)(const EVP_MD*, const void*, int, const unsigned char*, size_t, unsigned char*, unsigned int*);
+static hmac_fn real_HMAC = nullptr;
+
+extern "C" unsigned char* HMAC(const EVP_MD* evp_md, const void* key, int key_len,
+                               const unsigned char* d, size_t n, unsigned char* md, unsigned int* md_len) {
+    if (!real_HMAC) {
+        real_HMAC = (hmac_fn)resolve_next_symbol("HMAC");
+        if (!real_HMAC) return nullptr;
+    }
+    
+    // HMAC 키 로깅
+    if (key && key_len > 0) {
+        const char* md_name = EVP_MD_name ? EVP_MD_name(evp_md) : "unknown";
+        log_crypto_event("HMAC", "mac", md_name, (const unsigned char*)key, key_len);
+    }
+    
+    return real_HMAC(evp_md, key, key_len, d, n, md, md_len);
+}
+
+// PBKDF2 함수 훅
+using pbkdf2_fn = int(*)(const char*, int, const unsigned char*, int, int, const EVP_MD*, int, unsigned char*);
+static pbkdf2_fn real_PKCS5_PBKDF2_HMAC = nullptr;
+
+extern "C" int PKCS5_PBKDF2_HMAC(const char* pass, int passlen, const unsigned char* salt,
+                                  int saltlen, int iter, const EVP_MD* digest,
+                                  int keylen, unsigned char* out) {
+    if (!real_PKCS5_PBKDF2_HMAC) {
+        real_PKCS5_PBKDF2_HMAC = (pbkdf2_fn)resolve_next_symbol("PKCS5_PBKDF2_HMAC");
+        if (!real_PKCS5_PBKDF2_HMAC) return 0;
+    }
+    
+    // PBKDF2 패스워드와 솔트 로깅
+    if (pass && passlen > 0) {
+        log_crypto_event("PBKDF2", "derive", "password", (const unsigned char*)pass, passlen);
+    }
+    if (salt && saltlen > 0) {
+        log_crypto_event("PBKDF2", "derive", "salt", salt, saltlen);
+    }
+    
+    return real_PKCS5_PBKDF2_HMAC(pass, passlen, salt, saltlen, iter, digest, keylen, out);
+}
+
+// EVP Digest Sign 함수들 (RSA 서명 등)
+using digest_sign_init_fn = int(*)(EVP_MD_CTX*, EVP_PKEY_CTX**, const EVP_MD*, ENGINE*, EVP_PKEY*);
+static digest_sign_init_fn real_EVP_DigestSignInit = nullptr;
+
+extern "C" int EVP_DigestSignInit(EVP_MD_CTX* ctx, EVP_PKEY_CTX** pctx, const EVP_MD* type,
+                                  ENGINE* e, EVP_PKEY* pkey) {
+    if (!real_EVP_DigestSignInit) {
+        real_EVP_DigestSignInit = (digest_sign_init_fn)resolve_next_symbol("EVP_DigestSignInit");
+        if (!real_EVP_DigestSignInit) return 0;
+    }
+    
+    // RSA/EC 서명 키 로깅
+    if (pkey) {
+        const char* key_type = "unknown";
+        int key_id = EVP_PKEY_id(pkey);
+        if (key_id == EVP_PKEY_RSA) key_type = "RSA";
+        else if (key_id == EVP_PKEY_EC) key_type = "EC";
+        
+        log_crypto_event("EVP_DigestSignInit", "sign", key_type, nullptr, 0);
+    }
+    
+    return real_EVP_DigestSignInit(ctx, pctx, type, e, pkey);
+}
+
+// EVP PKEY derive (ECDH 등)
+using pkey_derive_fn = int(*)(EVP_PKEY_CTX*, unsigned char*, size_t*);
+static pkey_derive_fn real_EVP_PKEY_derive = nullptr;
+
+extern "C" int EVP_PKEY_derive(EVP_PKEY_CTX* ctx, unsigned char* key, size_t* keylen) {
+    if (!real_EVP_PKEY_derive) {
+        real_EVP_PKEY_derive = (pkey_derive_fn)resolve_next_symbol("EVP_PKEY_derive");
+        if (!real_EVP_PKEY_derive) return 0;
+    }
+    
+    int ret = real_EVP_PKEY_derive(ctx, key, keylen);
+    
+    // 키 파생 후 결과 로깅 (성공 시에만)
+    if (ret == 1 && key && keylen && *keylen > 0) {
+        log_crypto_event("EVP_PKEY_derive", "derive", "ECDH", key, *keylen);
+    }
+    
+    return ret;
+}
