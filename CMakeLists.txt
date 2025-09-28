@@ -145,6 +145,7 @@ if(ENABLE_CRYPTODEV)
     if(HAVE_CRYPTODEV_H)
         add_executable(cryptodev_aes_cbc_demo tests/cryptodev/ioctl/cryptodev_aes_cbc_demo.c)
         add_executable(cryptodev_hmac_sha256_demo tests/cryptodev/ioctl/cryptodev_hmac_sha256_demo.c)
+        add_executable(cryptodev_rsa_demo tests/cryptodev/ioctl/cryptodev_rsa_demo.c)
     else()
         message(WARNING "crypto/cryptodev.h not found; skipping cryptodev demo build")
     endif()
@@ -189,7 +190,10 @@ if(ENABLE_AF_ALG AND HAVE_LINUX_IF_ALG_H)
         af_alg_hmac_sha256_demo)
 endif()
 if(ENABLE_CRYPTODEV AND HAVE_CRYPTODEV_H)
-    list(APPEND TEST_TARGETS cryptodev_aes_cbc_demo cryptodev_hmac_sha256_demo)
+    list(APPEND TEST_TARGETS
+        cryptodev_aes_cbc_demo
+        cryptodev_hmac_sha256_demo
+        cryptodev_rsa_demo)
 endif()
 
 foreach(tgt IN LISTS TEST_TARGETS)
@@ -200,7 +204,9 @@ foreach(tgt IN LISTS TEST_TARGETS)
      NOT tgt STREQUAL "af_alg_skcipher_aes_cbc_demo" AND
      NOT tgt STREQUAL "af_alg_aes_gcm_demo" AND
      NOT tgt STREQUAL "af_alg_hmac_sha256_demo" AND
-     NOT tgt STREQUAL "cryptodev_aes_cbc_demo")
+     NOT tgt STREQUAL "cryptodev_aes_cbc_demo" AND
+     NOT tgt STREQUAL "cryptodev_hmac_sha256_demo" AND
+     NOT tgt STREQUAL "cryptodev_rsa_demo")
     target_precompile_headers(${tgt} PRIVATE ${CMAKE_SOURCE_DIR}/include/pch.h)
   endif()
 endforeach()

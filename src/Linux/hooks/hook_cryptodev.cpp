@@ -19,6 +19,7 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
+#include <algorithm>
 
 static constexpr const char* SURFACE = "cryptodev";
 
@@ -79,6 +80,28 @@ static void forget_session(uint32_t ses) {
     g_sessions.erase(ses);
 }
 
+static const char* kop_op_to_string(unsigned int op) {
+    switch (op) {
+        case CRK_MOD_EXP: return "CRK_MOD_EXP";
+        case CRK_MOD_EXP_CRT: return "CRK_MOD_EXP_CRT";
+        case CRK_MOD_INV: return "CRK_MOD_INV";
+        case CRK_DSA_SIGN: return "CRK_DSA_SIGN";
+        case CRK_DSA_VERIFY: return "CRK_DSA_VERIFY";
+        case CRK_DH_COMPUTE_KEY: return "CRK_DH_COMPUTE_KEY";
+        case CRK_RSA_SIGN: return "CRK_RSA_SIGN";
+        case CRK_RSA_VERIFY: return "CRK_RSA_VERIFY";
+        default: return "CRK_UNKNOWN";
+    }
+}
+
+static std::vector<unsigned char> copy_param(const struct crparam& p) {
+    if (!p.crp_p || p.crp_n == 0) return {};
+    size_t len = std::min<size_t>(p.crp_n, 1024);
+    std::vector<unsigned char> out(len);
+    memcpy(out.data(), p.crp_p, len);
+    return out;
+}
+
 extern "C" int ioctl(int fd, unsigned long request, void* arg) {
     RESOLVE_SYM(real_ioctl, "ioctl");
     if (!real_ioctl)
@@ -90,6 +113,9 @@ extern "C" int ioctl(int fd, unsigned long request, void* arg) {
     std::vector<unsigned char> key_copy;
     std::string cipher_name;
 
+    struct crypt_kop kop_before{};
+    std::vector<std::vector<unsigned char>> kop_params;
+
     if (request == CIOCGSESSION && arg) {
         std::memcpy(&sess_before, arg, sizeof(sess_before));
         have_session_before = true;
@@ -100,6 +126,11 @@ extern "C" int ioctl(int fd, unsigned long request, void* arg) {
         }
         if (const char* cname = cipher_to_string(sess_before.cipher)) {
             cipher_name.assign(cname);
+        }
+    } else if (request == CIOCKEY && arg) {
+        std::memcpy(&kop_before, arg, sizeof(kop_before));
+        for (unsigned int i = 0; i < kop_before.crk_iparams && i < CRK_MAXPARAM; ++i) {
+            kop_params.push_back(copy_param(kop_before.crk_param[i]));
         }
     }
 
@@ -128,6 +159,21 @@ extern "C" int ioctl(int fd, unsigned long request, void* arg) {
             info.cipher_name.empty() ? nullptr : info.cipher_name.c_str(),
             info.key.empty() ? nullptr : info.key.data(),
             static_cast<int>(info.key.size()),
+            nullptr,
+            0,
+            nullptr,
+            0);
+    } else if (request == CIOCKEY && arg && !kop_params.empty()) {
+        const char* op_name = kop_op_to_string(kop_before.crk_op);
+        const unsigned char* keyptr = kop_params[0].empty() ? nullptr : kop_params[0].data();
+        int keylen = static_cast<int>(kop_params[0].size());
+        ndjson_log_key_event(
+            SURFACE,
+            "CIOCKEY",
+            op_name,
+            op_name,
+            keyptr,
+            keylen,
             nullptr,
             0,
             nullptr,

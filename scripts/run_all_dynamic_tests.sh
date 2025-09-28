@@ -37,6 +37,7 @@ OPTIONAL_TESTS+=(
   af_alg_hmac_sha256_demo
   cryptodev_aes_cbc_demo
   cryptodev_hmac_sha256_demo
+  cryptodev_rsa_demo
 )
 
 STATUS=0

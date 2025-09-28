@@ -62,6 +62,7 @@ cmake --build build -j
 - **cryptodev**
   - `tests/cryptodev/ioctl/cryptodev_aes_cbc_demo.c` : `/dev/crypto` ioctl 기반 AES-256-CBC 세션
   - `tests/cryptodev/ioctl/cryptodev_hmac_sha256_demo.c` : HMAC-SHA256 세션 키 설정
+  - `tests/cryptodev/ioctl/cryptodev_rsa_demo.c` : RSA 모듈러 연산 (CIOCKEY)
 - **libsodium**
   - `tests/libsodium/aead/chacha20_poly1305_demo.c` : `crypto_aead_chacha20poly1305_ietf_*`
   - `tests/libsodium/aead/xchacha20_poly1305_demo.c` : `crypto_aead_xchacha20poly1305_ietf_*`
