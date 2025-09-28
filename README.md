@@ -1,6 +1,11 @@
-# LD_PRELOAD 암호화 동적 분석 도구
+# 암호 라이브러리 동적 분석 도구
 
-OpenSSL · Linux 커널 AF_ALG · JNI 기반 Java 등에서 수행되는 암호화 연산을 `LD_PRELOAD`로 훅킹하여 실시간으로 키/IV/태그 정보를 캡처하는 도구입니다. 바이너리 앞에 공유 라이브러리(`libhook.so`)를 선주입하면, OpenSSL API 호출이 가로채져 NDJSON 로그로 떨어집니다. `dynamic_analysis_cli` 실행 파일을 이용하면 대상 프로그램을 자동으로 LD_PRELOAD 주입해 분석한 뒤, 수집된 이벤트를 즉시 출력까지 해 줍니다.
+OpenSSL · Linux 커널 AF_ALG · JNI 기반 Java 등 다양한 암호화 실행 경로를 훅킹해 실시간으로 키/IV/태그 정보를 수집하는 분석 도구입니다. 플랫폼별 주입 방식은 다음과 같습니다.
+
+- **Linux**: `LD_PRELOAD`로 `libhook.so`를 선주입해 암호 API를 가로채고 NDJSON 로그를 생성합니다.
+- **Windows (구현 예정)**: DLL 인젝션 기반 주입 방식으로 동일한 이벤트 스트림을 수집할 예정입니다.
+
+`dynamic_analysis_cli`는 대상 프로그램을 자동으로 주입 실행한 뒤 수집된 이벤트를 표준 출력과 로그 파일 모두에 기록합니다.
 
 ---
 
@@ -24,6 +29,28 @@ cmake --build build -j
 ---
 
 ## 사용법
+
+### 0. 의존 라이브러리 설치
+
+아래 명령을 한 번에 실행하면 OpenSSL, libsodium, GnuTLS, NSS, mbedTLS까지 필요한 개발 헤더가 설치됩니다(Ubuntu 24.04 기준).
+
+```bash
+sudo apt-get update
+sudo apt-get install -y \
+  build-essential cmake pkg-config \
+  libssl-dev libsodium-dev gnutls-dev \
+  libnss3-dev libnspr4-dev libp11-kit-dev \
+  libmbedtls-dev
+# (선택) Java JNI 샘플을 돌리려면 SDKMAN 등의 도구로 JDK 설치 후 JAVA_HOME 설정
+# sdkman example: sdk install java 21.0.4-amzn
+
+# (선택) cryptodev 모듈이 필요한 경우 – VM/베어메탈 등 모듈 로드 가능한 환경에서만
+# sudo apt-get install -y cryptodev-dkms libcryptodev-dev
+# sudo modprobe cryptodev && ls -l /dev/cryptodev
+```
+
+※ WSL2 기본 커널은 모듈 로드를 지원하지 않으므로 cryptodev 샘플은 자동 건너뛰기 됩니다. 특정 패키지가 누락되면 해당 샘플만 빌드/실행이 생략되고 나머지 경로는 정상 동작합니다.
+
 1. 로그 파일 경로 지정 (선택)
    ```bash
    export HOOK_NDJSON="$PWD/logs/analysis.ndjson"
@@ -106,6 +133,8 @@ cmake --build build -j
 ## 참고 사항
 - 정적 링크 또는 setuid 바이너리에는 LD_PRELOAD가 적용되지 않습니다.
 - Pure Java(SunJCE 등) 경로는 키를 잡을 수 없으며, JNI를 통해 OpenSSL을 사용할 때만 후킹됩니다.
+- AF_ALG 샘플은 루트 실행이거나 `setcap cap_net_admin,cap_sys_admin+ep` 등 소켓 권한이 필요합니다.
+- cryptodev 샘플은 `/dev/cryptodev` 장치가 있는 환경(예: 모듈 로드 가능한 VM/베어메탈)에서만 실행됩니다.
 - OpenSSL 이외의 샘플들은 기본 빌드에 포함되지 않습니다. 필요 시 각 라이브러리를 설치한 뒤 개별 명령으로 빌드하여 `dynamic_analysis_cli`와 함께 사용하세요.
 - 필요 시 `HOOK_VERBOSE=1`로 설정하면 stderr에 디버그 로그가 함께 출력됩니다.
 - 분석 과정에서 기존 `HOOK_NDJSON` 값이 있었다면 CLI가 일시적으로 덮어쓰고 나중에 복구합니다.
