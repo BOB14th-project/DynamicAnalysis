@@ -126,6 +126,8 @@ sudo apt-get install -y \
   - `tests/PyCryptodome/symmetric/aes_gcm_demo.py` : Python AES-256-GCM
     - 후킹은 `tests/PyCryptodome/symmetric/run_pycryptodome_aes_gcm_demo.sh` 스크립트를 통해 실행 (가상환경이 있으면 자동 사용)
     - PyCryptodome은 기본적으로 `RTLD_DEEPBIND`를 사용하므로, 스크립트에서 `PYCRYPTODOME_DISABLE_DEEPBIND=1`을 설정해 LD_PRELOAD 후킹이 적용되도록 처리했습니다.
+  - `tests/PyCryptodome/symmetric/aes_gcm_aad_demo.py` : AAD 포함 AES-256-GCM / 검증 흐름
+  - `tests/PyCryptodome/symmetric/aes_gcm_stream_demo.py` : 다중 `encrypt()` 호출로 스트리밍 암호화
 - **Java JNI + OpenSSL**
   - `tests/java_test/JavaNativeSSL.*`, `tests/java_test/complextest` : JNI/네이티브 혼합 암호화
 - **Java 프로세스 탐지**

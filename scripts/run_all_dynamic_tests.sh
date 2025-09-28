@@ -48,6 +48,8 @@ OPTIONAL_TESTS+=(
   boringssl_chacha20_poly1305_demo
   boringssl_xchacha20_poly1305_demo
   tests/PyCryptodome/symmetric/run_pycryptodome_aes_gcm_demo.sh
+  tests/PyCryptodome/symmetric/run_pycryptodome_aes_gcm_aad_demo.sh
+  tests/PyCryptodome/symmetric/run_pycryptodome_aes_gcm_stream_demo.sh
   af_alg_skcipher_aes_cbc_demo
   af_alg_aes_gcm_demo
   af_alg_hmac_sha256_demo
