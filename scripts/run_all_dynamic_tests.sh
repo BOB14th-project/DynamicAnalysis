@@ -43,6 +43,7 @@ OPTIONAL_TESTS+=(
   mbedtls_hmac_sha256_demo
   mbedtls_ecdsa_demo
   mbedtls_rsa_demo
+  boringssl_aes_gcm_demo
   af_alg_skcipher_aes_cbc_demo
   af_alg_aes_gcm_demo
   af_alg_hmac_sha256_demo

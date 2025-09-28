@@ -235,6 +235,41 @@ else()
     message(WARNING "wolfSSL headers or library not found; skipping wolfssl demo build")
 endif()
 
+set(BORINGSSL_FOUND OFF)
+set(BORINGSSL_INCLUDE_HINTS)
+set(BORINGSSL_LIB_HINTS)
+if(DEFINED BORINGSSL_ROOT)
+    list(APPEND BORINGSSL_INCLUDE_HINTS
+        ${BORINGSSL_ROOT}/include
+        ${BORINGSSL_ROOT}/include/boringssl
+        ${BORINGSSL_ROOT}/src/include)
+    list(APPEND BORINGSSL_LIB_HINTS
+        ${BORINGSSL_ROOT}/build
+        ${BORINGSSL_ROOT}/build/crypto
+        ${BORINGSSL_ROOT}/build/lib
+        ${BORINGSSL_ROOT}/crypto
+        ${BORINGSSL_ROOT}/lib)
+endif()
+
+find_path(BORINGSSL_INCLUDE_DIR openssl/is_boringssl.h
+          PATHS ${BORINGSSL_INCLUDE_HINTS}
+          NO_DEFAULT_PATH)
+find_library(BORINGSSL_CRYPTO_LIBRARY crypto
+             PATHS ${BORINGSSL_LIB_HINTS}
+             NO_DEFAULT_PATH)
+if(BORINGSSL_INCLUDE_DIR AND BORINGSSL_CRYPTO_LIBRARY)
+    set(BORINGSSL_FOUND ON)
+    target_sources(hook PRIVATE src/Linux/hooks/hook_boringssl.cpp)
+    set_source_files_properties(src/Linux/hooks/hook_boringssl.cpp
+        PROPERTIES
+            COMPILE_FLAGS "-I${BORINGSSL_INCLUDE_DIR}")
+    add_executable(boringssl_aes_gcm_demo tests/boringSSL/symmetric/boringssl_aes_gcm_demo.cc)
+    target_include_directories(boringssl_aes_gcm_demo PRIVATE ${BORINGSSL_INCLUDE_DIR})
+    target_link_libraries(boringssl_aes_gcm_demo PRIVATE ${BORINGSSL_CRYPTO_LIBRARY})
+else()
+    message(WARNING "BoringSSL headers or library not found; skipping BoringSSL demo build")
+endif()
+
 if(ENABLE_AF_ALG)
     check_include_file("linux/if_alg.h" HAVE_LINUX_IF_ALG_H)
     if(HAVE_LINUX_IF_ALG_H)
@@ -312,6 +347,9 @@ if(MBEDTLS_FOUND)
     if(TARGET mbedtls_rsa_demo)
         list(APPEND TEST_TARGETS mbedtls_rsa_demo)
     endif()
+endif()
+if(BORINGSSL_FOUND)
+    list(APPEND TEST_TARGETS boringssl_aes_gcm_demo)
 endif()
 if(ENABLE_AF_ALG AND HAVE_LINUX_IF_ALG_H)
     list(APPEND TEST_TARGETS

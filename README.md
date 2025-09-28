@@ -47,6 +47,14 @@ sudo apt-get install -y \
 # (선택) cryptodev 모듈이 필요한 경우 – VM/베어메탈 등 모듈 로드 가능한 환경에서만
 # sudo apt-get install -y cryptodev-dkms libcryptodev-dev
 # sudo modprobe cryptodev && ls -l /dev/cryptodev
+# (선택) BoringSSL 샘플은 소스 빌드가 필요하며, 아래 순서를 참고하세요.
+#   1) git clone https://github.com/google/boringssl.git
+#   2) cmake -S boringssl -B boringssl/build -GNinja -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON
+#   3) ninja -C boringssl/build crypto ssl
+#   4) 프로젝트 루트에서 cmake -S . -B build \
+#        -DBORINGSSL_ROOT=/절대/경로/boringssl \
+#        -UBORINGSSL_CRYPTO_LIBRARY -UBORINGSSL_INCLUDE_DIR
+#      (기존 캐시를 무효화해 BoringSSL libcrypto.so를 찾도록 합니다.)
 ```
 
 ※ WSL2 기본 커널은 모듈 로드를 지원하지 않으므로 cryptodev 샘플은 자동 건너뛰기 됩니다. 특정 패키지가 누락되면 해당 샘플만 빌드/실행이 생략되고 나머지 경로는 정상 동작합니다.
@@ -137,6 +145,7 @@ sudo apt-get install -y \
 - Pure Java(SunJCE 등) 경로는 키를 잡을 수 없으며, JNI를 통해 OpenSSL을 사용할 때만 후킹됩니다.
 - AF_ALG 샘플은 루트 실행이거나 `setcap cap_net_admin,cap_sys_admin+ep` 등 소켓 권한이 필요합니다.
 - cryptodev 샘플은 `/dev/cryptodev` 장치가 있는 환경(예: 모듈 로드 가능한 VM/베어메탈)에서만 실행됩니다.
+- BoringSSL 샘플은 별도 소스 빌드가 필요하며, `BUILD_SHARED_LIBS=ON`으로 공유 라이브러리를 만든 뒤 `BORINGSSL_ROOT`를 지정해야 LD_PRELOAD 후킹이 동작합니다.
 - OpenSSL 이외의 샘플들은 기본 빌드에 포함되지 않습니다. 필요 시 각 라이브러리를 설치한 뒤 개별 명령으로 빌드하여 `dynamic_analysis_cli`와 함께 사용하세요.
 - 필요 시 `HOOK_VERBOSE=1`로 설정하면 stderr에 디버그 로그가 함께 출력됩니다.
 - 분석 과정에서 기존 `HOOK_NDJSON` 값이 있었다면 CLI가 일시적으로 덮어쓰고 나중에 복구합니다.
