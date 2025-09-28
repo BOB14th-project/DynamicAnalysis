@@ -93,13 +93,12 @@ if(JNI_FOUND)
 endif()
 
 # ── OpenSSL 테스트 (암호화 경로별 커버리지)
-add_executable(openssl_demo_target                  tests/openssl/demo/demo_target.cpp)
-add_executable(openssl_aes_lib_test                 tests/openssl/symmetric/aes_lib_test.cpp)
-add_executable(openssl_symm_aes_gcm_test            tests/openssl/aead/symm_aes_gcm_test.cpp)
-add_executable(openssl_ecc_sign_test                tests/openssl/ecc/ecc_sign_test.cpp)
-add_executable(openssl_ecc_ecies_test               tests/openssl/ecc/ecc_ECIES_test.cpp)
-add_executable(openssl_provider_ex2_test            tests/openssl/provider/openssl3_ex2_test.cpp)
-add_executable(openssl_provider_ex2_params_test     tests/openssl/provider/openssl3_ex2_params_test.cpp)
+add_executable(openssl_aes_lib_test                 tests/openssl/symmetric/openssl_aes_lib_test.cpp)
+add_executable(openssl_symm_aes_gcm_test            tests/openssl/aead/openssl_symm_aes_gcm_test.cpp)
+add_executable(openssl_ecc_sign_test                tests/openssl/ecc/openssl_ecc_sign_test.cpp)
+add_executable(openssl_ecc_ecies_test               tests/openssl/ecc/openssl_ecc_ecies_test.cpp)
+add_executable(openssl_provider_ex2_test            tests/openssl/provider/openssl_provider_ex2_test.cpp)
+add_executable(openssl_provider_ex2_params_test     tests/openssl/provider/openssl_provider_ex2_params_test.cpp)
 
 # ── libsodium 테스트 (선택적)
 set(LIBSODIUM_FOUND OFF)
@@ -115,6 +114,14 @@ if(ENABLE_LIBSODIUM)
         add_executable(libsodium_xchacha20_poly1305_demo tests/libsodium/aead/xchacha20_poly1305_demo.c)
         target_include_directories(libsodium_xchacha20_poly1305_demo PRIVATE ${LIBSODIUM_INCLUDE_DIR})
         target_link_libraries(libsodium_xchacha20_poly1305_demo PRIVATE ${LIBSODIUM_LIBRARY})
+
+        add_executable(libsodium_secretbox_demo tests/libsodium/secretbox/libsodium_secretbox_demo.c)
+        target_include_directories(libsodium_secretbox_demo PRIVATE ${LIBSODIUM_INCLUDE_DIR})
+        target_link_libraries(libsodium_secretbox_demo PRIVATE ${LIBSODIUM_LIBRARY})
+
+        add_executable(libsodium_box_demo tests/libsodium/box/libsodium_box_demo.c)
+        target_include_directories(libsodium_box_demo PRIVATE ${LIBSODIUM_INCLUDE_DIR})
+        target_link_libraries(libsodium_box_demo PRIVATE ${LIBSODIUM_LIBRARY})
     else()
         message(WARNING "libsodium headers or library not found; skipping libsodium demo build")
     endif()
@@ -135,7 +142,6 @@ endif()
 
 # 테스트 타깃에도 PCH 적용
 set(TEST_TARGETS
-    openssl_demo_target
     openssl_aes_lib_test
     openssl_symm_aes_gcm_test
     openssl_ecc_sign_test
@@ -147,12 +153,18 @@ if(JNI_FOUND)
     list(APPEND TEST_TARGETS java_process_detector)
 endif()
 if(LIBSODIUM_FOUND)
-    list(APPEND TEST_TARGETS libsodium_chacha20_poly1305_demo libsodium_xchacha20_poly1305_demo)
+    list(APPEND TEST_TARGETS
+        libsodium_chacha20_poly1305_demo
+        libsodium_xchacha20_poly1305_demo
+        libsodium_secretbox_demo
+        libsodium_box_demo)
 endif()
 
 foreach(tgt IN LISTS TEST_TARGETS)
   if(NOT tgt STREQUAL "libsodium_chacha20_poly1305_demo" AND
-     NOT tgt STREQUAL "libsodium_xchacha20_poly1305_demo")
+     NOT tgt STREQUAL "libsodium_xchacha20_poly1305_demo" AND
+     NOT tgt STREQUAL "libsodium_secretbox_demo" AND
+     NOT tgt STREQUAL "libsodium_box_demo")
     target_precompile_headers(${tgt} PRIVATE ${CMAKE_SOURCE_DIR}/include/pch.h)
   endif()
 endforeach()

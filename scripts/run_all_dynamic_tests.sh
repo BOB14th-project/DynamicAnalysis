@@ -21,14 +21,18 @@ TESTS=(
   openssl_ecc_ecies_test
   openssl_provider_ex2_test
   openssl_provider_ex2_params_test
-  openssl_demo_target
 )
 
 # Include Java detector only if it was built (requires JNI).
 OPTIONAL_TESTS=(java_process_detector)
 
 # libsodium demo is optional: build depends on having libsodium headers.
-OPTIONAL_TESTS+=(libsodium_chacha20_poly1305_demo libsodium_xchacha20_poly1305_demo)
+OPTIONAL_TESTS+=(
+  libsodium_chacha20_poly1305_demo
+  libsodium_xchacha20_poly1305_demo
+  libsodium_secretbox_demo
+  libsodium_box_demo
+)
 
 STATUS=0
 

@@ -49,13 +49,12 @@ cmake --build build -j
 각 샘플은 후킹 대상 경로별로 최소한의 재현 환경을 제공합니다. OpenSSL 관련 실행 파일은 CMake에 등록되어 있어 바로 빌드되며, 그 외 라이브러리 예제는 해당 라이브러리를 설치한 뒤 직접 빌드/실행해 동적 분석에 활용할 수 있습니다.
 
 - **OpenSSL (CMake 빌드 대상)**
-  - `tests/openssl/symmetric/aes_lib_test.cpp` : EVP AES-256-CBC 초기화 → 키 추출
-  - `tests/openssl/aead/symm_aes_gcm_test.cpp` : EVP AES-256-GCM → 키/IV/TAG 로깅
-  - `tests/openssl/ecc/ecc_sign_test.cpp` : ECDSA 키 생성·서명 → ECC 개인키/서명 로그
-  - `tests/openssl/ecc/ecc_ECIES_test.cpp` : ECDH + HKDF + AES-GCM 복합 시나리오
-  - `tests/openssl/provider/openssl3_ex2_test.cpp` : OpenSSL 3 `*_ex2` 경로
-  - `tests/openssl/provider/openssl3_ex2_params_test.cpp` : OSSL_PARAM 기반 설정 값
-  - `tests/openssl/demo/demo_target.cpp` : LD_PRELOAD 주입 확인용 데모
+  - `tests/openssl/symmetric/openssl_aes_lib_test.cpp` : EVP AES-256-CBC 초기화 → 키 추출
+  - `tests/openssl/aead/openssl_symm_aes_gcm_test.cpp` : EVP AES-256-GCM → 키/IV/TAG 로깅
+  - `tests/openssl/ecc/openssl_ecc_sign_test.cpp` : ECDSA 키 생성·서명 → ECC 개인키/서명 로그
+  - `tests/openssl/ecc/openssl_ecc_ecies_test.cpp` : ECDH + HKDF + AES-GCM 복합 시나리오
+  - `tests/openssl/provider/openssl_provider_ex2_test.cpp` : OpenSSL 3 `*_ex2` 경로
+  - `tests/openssl/provider/openssl_provider_ex2_params_test.cpp` : OSSL_PARAM 기반 설정 값
 - **Linux AF_ALG**
   - `tests/af_alg_test/aes_gcm_afalg_test.cpp` : 소켓 기반 커널 암호화(AF_ALG) 키/IV/TAG 후킹
 - **cryptodev**
@@ -63,6 +62,8 @@ cmake --build build -j
 - **libsodium**
   - `tests/libsodium/aead/chacha20_poly1305_demo.c` : `crypto_aead_chacha20poly1305_ietf_*`
   - `tests/libsodium/aead/xchacha20_poly1305_demo.c` : `crypto_aead_xchacha20poly1305_ietf_*`
+  - `tests/libsodium/secretbox/libsodium_secretbox_demo.c` : `crypto_secretbox_*`
+  - `tests/libsodium/box/libsodium_box_demo.c` : `crypto_box_*`
 - **GnuTLS**
   - `tests/GnuTLS/symmetric/gnutls_aes_gcm_demo.c` : `gnutls_cipher_*` AES-256-GCM 호출
 - **NSS**

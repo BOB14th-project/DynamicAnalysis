@@ -7,6 +7,23 @@
 #include "resolver.h"
 #include "hook_common.h"
 #include <stdarg.h>
+#include <errno.h>
+
+namespace {
+
+void write_stderr_buffer(const char* data, size_t len) {
+    while (len > 0) {
+        ssize_t n = write(STDERR_FILENO, data, len);
+        if (n < 0) {
+            if (errno == EINTR) continue;
+            break;
+        }
+        data += static_cast<size_t>(n);
+        len -= static_cast<size_t>(n);
+    }
+}
+
+} // namespace
 
 // 원본 JNI 함수 포인터 타입 정의
 typedef jclass (*jni_findclass_t)(JNIEnv*, const char*);
@@ -34,7 +51,7 @@ static struct {
     jmethodID cipher_init_with_params_method;
     jclass secretkeyspec_class;
     jclass ivparameterspec_class;
-} java_crypto_cache = {0};
+} java_crypto_cache{};
 
 // 암호화 관련 클래스인지 확인 (java_crypto_utils.cpp에서 구현된 함수 사용)
 int is_crypto_class(const char* class_name) {
@@ -49,6 +66,7 @@ int is_crypto_class(const char* class_name) {
 
 // Cipher 관련 메서드인지 확인
 int is_cipher_method(const char* method_name, const char* signature) {
+    (void)signature;
     if (!method_name) return 0;
     
     return (strcmp(method_name, "getInstance") == 0 ||
@@ -70,7 +88,9 @@ JNIEXPORT jclass JNICALL FindClass(JNIEnv* env, const char* name) {
             char log_msg[256];
             int n = snprintf(log_msg, sizeof(log_msg), 
                            "[JAVA HOOK] Loading crypto class: %s\n", name);
-            write(STDERR_FILENO, log_msg, n);
+            if (n > 0) {
+                write_stderr_buffer(log_msg, static_cast<size_t>(n));
+            }
         }
         
         jclass result = real_jni_FindClass(env, name);
@@ -103,7 +123,9 @@ JNIEXPORT jmethodID JNICALL GetMethodID(JNIEnv* env, jclass clazz, const char* n
             char log_msg[256];
             int n = snprintf(log_msg, sizeof(log_msg),
                            "[JAVA HOOK] Getting cipher method: %s%s\n", name, sig);
-            write(STDERR_FILENO, log_msg, n);
+            if (n > 0) {
+                write_stderr_buffer(log_msg, static_cast<size_t>(n));
+            }
         }
         
         jmethodID result = real_jni_GetMethodID(env, clazz, name, sig);
@@ -136,7 +158,9 @@ JNIEXPORT jmethodID JNICALL GetStaticMethodID(JNIEnv* env, jclass clazz, const c
             char log_msg[128];
             int n = snprintf(log_msg, sizeof(log_msg),
                            "[JAVA HOOK] Getting Cipher.getInstance method\n");
-            write(STDERR_FILENO, log_msg, n);
+            if (n > 0) {
+                write_stderr_buffer(log_msg, static_cast<size_t>(n));
+            }
         }
         
         jmethodID result = real_jni_GetStaticMethodID(env, clazz, name, sig);
@@ -169,7 +193,9 @@ JNIEXPORT jobject JNICALL CallStaticObjectMethod(JNIEnv* env, jclass clazz, jmet
                     char log_msg[256];
                     int n = snprintf(log_msg, sizeof(log_msg),
                                    "[JAVA HOOK] Cipher.getInstance(\"%s\")\n", trans_str);
-                    write(STDERR_FILENO, log_msg, n);
+                    if (n > 0) {
+                        write_stderr_buffer(log_msg, static_cast<size_t>(n));
+                    }
                 }
             }
         }
@@ -232,7 +258,9 @@ JNIEXPORT void JNICALL CallVoidMethod(JNIEnv* env, jobject obj, jmethodID method
             char log_msg[128];
             int n = snprintf(log_msg, sizeof(log_msg),
                            "[JAVA HOOK] Cipher.init(mode=%s)\n", mode_str);
-            write(STDERR_FILENO, log_msg, n);
+            if (n > 0) {
+                write_stderr_buffer(log_msg, static_cast<size_t>(n));
+            }
         }
         
         // 키 정보 추출
@@ -248,7 +276,9 @@ JNIEXPORT void JNICALL CallVoidMethod(JNIEnv* env, jobject obj, jmethodID method
                 char log_msg[64];
                 int n = snprintf(log_msg, sizeof(log_msg),
                                "[JAVA HOOK] IV parameter detected\n");
-                write(STDERR_FILENO, log_msg, n);
+                if (n > 0) {
+                    write_stderr_buffer(log_msg, static_cast<size_t>(n));
+                }
             }
         }
     }
@@ -274,7 +304,8 @@ void hook_java_crypto_init(void) {
     memset(&java_crypto_cache, 0, sizeof(java_crypto_cache));
     
     if (hook_is_verbose()) {
-        write(STDERR_FILENO, "[JAVA HOOK] JNI crypto hooks initialized\n", 41);
+        static const char kInitMsg[] = "[JAVA HOOK] JNI crypto hooks initialized\n";
+        write_stderr_buffer(kInitMsg, sizeof(kInitMsg) - 1);
     }
 }
 

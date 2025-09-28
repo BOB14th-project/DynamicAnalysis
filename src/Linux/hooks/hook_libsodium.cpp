@@ -17,6 +17,8 @@ struct AEADConfig {
 
 constexpr AEADConfig kChacha20Poly1305Ietf{ "chacha20poly1305-ietf", 32, 12, 16 };
 constexpr AEADConfig kXChacha20Poly1305Ietf{ "xchacha20poly1305-ietf", 32, 24, 16 };
+constexpr AEADConfig kSecretboxEasy{ "secretbox-easy", 32, 24, 16 };
+constexpr AEADConfig kBoxEasy{ "box-easy", 32, 24, 16 };
 
 #define STRINGIFY_INTERNAL(x) #x
 #define STRINGIFY(x) STRINGIFY_INTERNAL(x)
@@ -204,3 +206,124 @@ DEFINE_AEAD_DETACHED_HOOK(crypto_aead_chacha20poly1305_ietf, kChacha20Poly1305Ie
 DEFINE_AEAD_ATTACHED_HOOK(crypto_aead_xchacha20poly1305_ietf, kXChacha20Poly1305Ietf)
 DEFINE_AEAD_DETACHED_HOOK(crypto_aead_xchacha20poly1305_ietf, kXChacha20Poly1305Ietf)
 
+using fn_crypto_secretbox_easy = int (*)(unsigned char*, const unsigned char*, unsigned long long, const unsigned char*, const unsigned char*);
+using fn_crypto_secretbox_open_easy = int (*)(unsigned char*, const unsigned char*, unsigned long long, const unsigned char*, const unsigned char*);
+
+static fn_crypto_secretbox_easy real_crypto_secretbox_easy = nullptr;
+static fn_crypto_secretbox_open_easy real_crypto_secretbox_open_easy = nullptr;
+
+extern "C" int crypto_secretbox_easy(unsigned char* c,
+                                      const unsigned char* m,
+                                      unsigned long long mlen,
+                                      const unsigned char* n,
+                                      const unsigned char* k) {
+    RESOLVE_SYM(real_crypto_secretbox_easy, "crypto_secretbox_easy");
+    if (!real_crypto_secretbox_easy) return -1;
+    ReentryGuard guard;
+    if (!guard) {
+        return real_crypto_secretbox_easy(c, m, mlen, n, k);
+    }
+    int ret = real_crypto_secretbox_easy(c, m, mlen, n, k);
+    if (ret == 0) {
+        const unsigned char* tag_ptr = c;
+        log_event(kSecretboxEasy,
+                  "crypto_secretbox_easy",
+                  "enc",
+                  k,
+                  k ? kSecretboxEasy.key_len : 0,
+                  n,
+                  n ? kSecretboxEasy.nonce_len : 0,
+                  tag_ptr,
+                  tag_ptr ? kSecretboxEasy.tag_len : 0);
+    }
+    return ret;
+}
+
+extern "C" int crypto_secretbox_open_easy(unsigned char* m,
+                                           const unsigned char* c,
+                                           unsigned long long clen,
+                                           const unsigned char* n,
+                                           const unsigned char* k) {
+    RESOLVE_SYM(real_crypto_secretbox_open_easy, "crypto_secretbox_open_easy");
+    if (!real_crypto_secretbox_open_easy) return -1;
+    ReentryGuard guard;
+    if (!guard) {
+        return real_crypto_secretbox_open_easy(m, c, clen, n, k);
+    }
+    int ret = real_crypto_secretbox_open_easy(m, c, clen, n, k);
+    if (ret == 0) {
+        const unsigned char* tag_ptr = (c && clen >= kSecretboxEasy.tag_len) ? c : nullptr;
+        log_event(kSecretboxEasy,
+                  "crypto_secretbox_open_easy",
+                  "dec",
+                  k,
+                  k ? kSecretboxEasy.key_len : 0,
+                  n,
+                  n ? kSecretboxEasy.nonce_len : 0,
+                  tag_ptr,
+                  tag_ptr ? kSecretboxEasy.tag_len : 0);
+    }
+    return ret;
+}
+
+using fn_crypto_box_easy = int (*)(unsigned char*, const unsigned char*, unsigned long long, const unsigned char*, const unsigned char*, const unsigned char*);
+using fn_crypto_box_open_easy = int (*)(unsigned char*, const unsigned char*, unsigned long long, const unsigned char*, const unsigned char*, const unsigned char*);
+
+static fn_crypto_box_easy real_crypto_box_easy = nullptr;
+static fn_crypto_box_open_easy real_crypto_box_open_easy = nullptr;
+
+extern "C" int crypto_box_easy(unsigned char* c,
+                                const unsigned char* m,
+                                unsigned long long mlen,
+                                const unsigned char* n,
+                                const unsigned char* pk,
+                                const unsigned char* sk) {
+    RESOLVE_SYM(real_crypto_box_easy, "crypto_box_easy");
+    if (!real_crypto_box_easy) return -1;
+    ReentryGuard guard;
+    if (!guard) {
+        return real_crypto_box_easy(c, m, mlen, n, pk, sk);
+    }
+    int ret = real_crypto_box_easy(c, m, mlen, n, pk, sk);
+    if (ret == 0) {
+        const unsigned char* tag_ptr = c;
+        log_event(kBoxEasy,
+                  "crypto_box_easy",
+                  "enc",
+                  sk,
+                  sk ? kBoxEasy.key_len : 0,
+                  n,
+                  n ? kBoxEasy.nonce_len : 0,
+                  tag_ptr,
+                  tag_ptr ? kBoxEasy.tag_len : 0);
+    }
+    return ret;
+}
+
+extern "C" int crypto_box_open_easy(unsigned char* m,
+                                     const unsigned char* c,
+                                     unsigned long long clen,
+                                     const unsigned char* n,
+                                     const unsigned char* pk,
+                                     const unsigned char* sk) {
+    RESOLVE_SYM(real_crypto_box_open_easy, "crypto_box_open_easy");
+    if (!real_crypto_box_open_easy) return -1;
+    ReentryGuard guard;
+    if (!guard) {
+        return real_crypto_box_open_easy(m, c, clen, n, pk, sk);
+    }
+    int ret = real_crypto_box_open_easy(m, c, clen, n, pk, sk);
+    if (ret == 0) {
+        const unsigned char* tag_ptr = (c && clen >= kBoxEasy.tag_len) ? c : nullptr;
+        log_event(kBoxEasy,
+                  "crypto_box_open_easy",
+                  "dec",
+                  sk,
+                  sk ? kBoxEasy.key_len : 0,
+                  n,
+                  n ? kBoxEasy.nonce_len : 0,
+                  tag_ptr,
+                  tag_ptr ? kBoxEasy.tag_len : 0);
+    }
+    return ret;
+}

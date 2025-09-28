@@ -55,8 +55,18 @@ extern "C" int bind(int sockfd, const struct sockaddr* addr, socklen_t len){
       pthread_mutex_lock(&g_mu);
       if (auto c = get(sockfd)) {
         c->is_afalg = true;
-        strncpy(c->type, (const char*)sa->salg_type, sizeof(c->type)-1);
-        strncpy(c->name, (const char*)sa->salg_name, sizeof(c->name)-1);
+        size_t type_len = strnlen((const char*)sa->salg_type, sizeof(sa->salg_type));
+        if (type_len > sizeof(c->type) - 1) {
+            type_len = sizeof(c->type) - 1;
+        }
+        memcpy(c->type, sa->salg_type, type_len);
+        c->type[type_len] = '\0';
+        size_t name_len = strnlen((const char*)sa->salg_name, sizeof(sa->salg_name));
+        if (name_len > sizeof(c->name) - 1) {
+            name_len = sizeof(c->name) - 1;
+        }
+        memcpy(c->name, sa->salg_name, name_len);
+        c->name[name_len] = '\0';
       }
       pthread_mutex_unlock(&g_mu);
     }
