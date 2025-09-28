@@ -132,6 +132,7 @@ endif()
 if(ENABLE_AF_ALG)
     check_include_file("linux/if_alg.h" HAVE_LINUX_IF_ALG_H)
     if(HAVE_LINUX_IF_ALG_H)
+        add_executable(af_alg_skcipher_aes_cbc_demo tests/af_alg/af_alg_skcipher_aes_cbc_demo.c)
         add_executable(af_alg_aes_gcm_demo tests/af_alg/af_alg_aes_gcm_demo.c)
         add_executable(af_alg_hmac_sha256_demo tests/af_alg/af_alg_hmac_sha256_demo.c)
     else()
@@ -143,6 +144,7 @@ if(ENABLE_CRYPTODEV)
     check_include_file("crypto/cryptodev.h" HAVE_CRYPTODEV_H)
     if(HAVE_CRYPTODEV_H)
         add_executable(cryptodev_aes_cbc_demo tests/cryptodev/ioctl/cryptodev_aes_cbc_demo.c)
+        add_executable(cryptodev_hmac_sha256_demo tests/cryptodev/ioctl/cryptodev_hmac_sha256_demo.c)
     else()
         message(WARNING "crypto/cryptodev.h not found; skipping cryptodev demo build")
     endif()
@@ -181,10 +183,13 @@ if(LIBSODIUM_FOUND)
         libsodium_box_demo)
 endif()
 if(ENABLE_AF_ALG AND HAVE_LINUX_IF_ALG_H)
-    list(APPEND TEST_TARGETS af_alg_aes_gcm_demo af_alg_hmac_sha256_demo)
+    list(APPEND TEST_TARGETS
+        af_alg_skcipher_aes_cbc_demo
+        af_alg_aes_gcm_demo
+        af_alg_hmac_sha256_demo)
 endif()
 if(ENABLE_CRYPTODEV AND HAVE_CRYPTODEV_H)
-    list(APPEND TEST_TARGETS cryptodev_aes_cbc_demo)
+    list(APPEND TEST_TARGETS cryptodev_aes_cbc_demo cryptodev_hmac_sha256_demo)
 endif()
 
 foreach(tgt IN LISTS TEST_TARGETS)
@@ -192,6 +197,7 @@ foreach(tgt IN LISTS TEST_TARGETS)
      NOT tgt STREQUAL "libsodium_xchacha20_poly1305_demo" AND
      NOT tgt STREQUAL "libsodium_secretbox_demo" AND
      NOT tgt STREQUAL "libsodium_box_demo" AND
+     NOT tgt STREQUAL "af_alg_skcipher_aes_cbc_demo" AND
      NOT tgt STREQUAL "af_alg_aes_gcm_demo" AND
      NOT tgt STREQUAL "af_alg_hmac_sha256_demo" AND
      NOT tgt STREQUAL "cryptodev_aes_cbc_demo")

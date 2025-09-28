@@ -56,10 +56,12 @@ cmake --build build -j
   - `tests/openssl/provider/openssl_provider_ex2_test.cpp` : OpenSSL 3 `*_ex2` 경로
   - `tests/openssl/provider/openssl_provider_ex2_params_test.cpp` : OSSL_PARAM 기반 설정 값
 - **Linux AF_ALG**
-  - `tests/af_alg/af_alg_aes_gcm_demo.c` : 소켓 기반 커널 AES skcipher 키 설정
+  - `tests/af_alg/af_alg_skcipher_aes_cbc_demo.c` : AES-CBC skcipher 키/IV 설정
+  - `tests/af_alg/af_alg_aes_gcm_demo.c` : AES-GCM AEAD 키/IV/assoc 설정
   - `tests/af_alg/af_alg_hmac_sha256_demo.c` : HMAC-SHA256 hash 키 설정
 - **cryptodev**
   - `tests/cryptodev/ioctl/cryptodev_aes_cbc_demo.c` : `/dev/crypto` ioctl 기반 AES-256-CBC 세션
+  - `tests/cryptodev/ioctl/cryptodev_hmac_sha256_demo.c` : HMAC-SHA256 세션 키 설정
 - **libsodium**
   - `tests/libsodium/aead/chacha20_poly1305_demo.c` : `crypto_aead_chacha20poly1305_ietf_*`
   - `tests/libsodium/aead/xchacha20_poly1305_demo.c` : `crypto_aead_xchacha20poly1305_ietf_*`
