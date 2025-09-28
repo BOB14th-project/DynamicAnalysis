@@ -46,6 +46,9 @@ OPTIONAL_TESTS+=(
   af_alg_skcipher_aes_cbc_demo
   af_alg_aes_gcm_demo
   af_alg_hmac_sha256_demo
+  wolfssl_aes_gcm_demo
+  wolfssl_aes_cbc_demo
+  wolfssl_hmac_sha256_demo
   cryptodev_aes_cbc_demo
   cryptodev_hmac_sha256_demo
   cryptodev_rsa_demo

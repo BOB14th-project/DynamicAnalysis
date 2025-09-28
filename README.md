@@ -40,7 +40,7 @@ sudo apt-get install -y \
   build-essential cmake pkg-config \
   libssl-dev libsodium-dev gnutls-dev \
   libnss3-dev libnspr4-dev libp11-kit-dev \
-  libmbedtls-dev
+  libmbedtls-dev libwolfssl-dev
 # (선택) Java JNI 샘플을 돌리려면 SDKMAN 등의 도구로 JDK 설치 후 JAVA_HOME 설정
 # sdkman example: sdk install java 21.0.4-amzn
 
@@ -105,7 +105,9 @@ sudo apt-get install -y \
 - **mbedTLS**
   - `tests/mbedTLS/symmetric/mbedtls_aes_gcm_demo.c` : `mbedtls_gcm_crypt_and_tag`
 - **wolfSSL**
-  - `tests/wolfSSL/symmetric/wolfssl_aes_gcm_demo.c` : `wc_AesGcmEncrypt`
+  - `tests/wolfSSL/symmetric/wolfssl_aes_gcm_demo.c` : `wc_AesGcmSetKey` / `wc_AesGcmEncrypt`
+  - `tests/wolfSSL/symmetric/wolfssl_aes_cbc_demo.c` : `wc_AesSetKey` / `wc_AesCbcEncrypt`
+  - `tests/wolfSSL/hash/wolfssl_hmac_sha256_demo.c` : `wc_HmacSetKey` / `wc_HmacFinal`
 - **PyCryptodome**
   - `tests/PyCryptodome/symmetric/aes_gcm_demo.py` : Python AES-256-GCM (CPython + LD_PRELOAD 경우)
 - **Java JNI + OpenSSL**

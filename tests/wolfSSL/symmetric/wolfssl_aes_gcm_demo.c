@@ -3,6 +3,7 @@
 // Build (requires wolfssl):
 //   gcc wolfssl_aes_gcm_demo.c -lwolfssl -o wolfssl_aes_gcm_demo
 
+#include <wolfssl/options.h>
 #include <wolfssl/wolfcrypt/aes.h>
 #include <stdio.h>
 #include <string.h>
