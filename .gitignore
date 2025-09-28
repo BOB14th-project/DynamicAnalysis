@@ -2,6 +2,13 @@
 *.ndjson
 logs/
 
+# python env
+.env/
+.venv/
+env/
+venv/
+ENV/
+
 # --- Build artifacts (CMake / Make)
 build/
 cmake-build-*/

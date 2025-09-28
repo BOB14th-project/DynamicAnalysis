@@ -47,6 +47,7 @@ OPTIONAL_TESTS+=(
   boringssl_aes_gcm_roundtrip_demo
   boringssl_chacha20_poly1305_demo
   boringssl_xchacha20_poly1305_demo
+  tests/PyCryptodome/symmetric/run_pycryptodome_aes_gcm_demo.sh
   af_alg_skcipher_aes_cbc_demo
   af_alg_aes_gcm_demo
   af_alg_hmac_sha256_demo
@@ -62,7 +63,12 @@ STATUS=0
 
 run_test() {
   local target=$1
-  local path="$BIN_DIR/$target"
+  local path
+  if [[ "$target" == */* ]]; then
+    path="$ROOT_DIR/$target"
+  else
+    path="$BIN_DIR/$target"
+  fi
   if [[ ! -x "$path" ]]; then
     echo "[skip] $target (binary not found)" >&2
     return

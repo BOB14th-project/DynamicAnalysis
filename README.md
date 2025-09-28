@@ -55,6 +55,8 @@ sudo apt-get install -y \
 #        -DBORINGSSL_ROOT=/절대/경로/boringssl \
 #        -UBORINGSSL_CRYPTO_LIBRARY -UBORINGSSL_INCLUDE_DIR
 #      (기존 캐시를 무효화해 BoringSSL libcrypto.so를 찾도록 합니다.)
+# (선택) PyCryptodome 샘플을 사용하려면 파이썬 가상환경 등을 만들어 pycryptodome을 설치하세요.
+#   python3 -m venv .venv && . .venv/bin/activate && pip install pycryptodome
 ```
 
 ※ WSL2 기본 커널은 모듈 로드를 지원하지 않으므로 cryptodev 샘플은 자동 건너뛰기 됩니다. 특정 패키지가 누락되면 해당 샘플만 빌드/실행이 생략되고 나머지 경로는 정상 동작합니다.
@@ -121,7 +123,9 @@ sudo apt-get install -y \
   - `tests/wolfSSL/symmetric/wolfssl_aes_cbc_demo.c` : `wc_AesSetKey` / `wc_AesCbcEncrypt`
   - `tests/wolfSSL/hash/wolfssl_hmac_sha256_demo.c` : `wc_HmacSetKey` / `wc_HmacFinal`
 - **PyCryptodome**
-  - `tests/PyCryptodome/symmetric/aes_gcm_demo.py` : Python AES-256-GCM (CPython + LD_PRELOAD 경우)
+  - `tests/PyCryptodome/symmetric/aes_gcm_demo.py` : Python AES-256-GCM
+    - 후킹은 `tests/PyCryptodome/symmetric/run_pycryptodome_aes_gcm_demo.sh` 스크립트를 통해 실행 (가상환경이 있으면 자동 사용)
+    - PyCryptodome은 기본적으로 `RTLD_DEEPBIND`를 사용하므로, 스크립트에서 `PYCRYPTODOME_DISABLE_DEEPBIND=1`을 설정해 LD_PRELOAD 후킹이 적용되도록 처리했습니다.
 - **Java JNI + OpenSSL**
   - `tests/java_test/JavaNativeSSL.*`, `tests/java_test/complextest` : JNI/네이티브 혼합 암호화
 - **Java 프로세스 탐지**

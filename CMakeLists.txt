@@ -60,6 +60,7 @@ if(UNIX)
         src/Linux/hooks/hook_openssl_core.cpp
         src/Linux/hooks/hook_openssl_provider.cpp
         src/Linux/hooks/hook_openssl_ecc.cpp
+        src/Linux/hooks/hook_pycryptodome.cpp
     )
 
     if(ENABLE_LIBSODIUM)
