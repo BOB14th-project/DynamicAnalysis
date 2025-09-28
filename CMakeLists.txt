@@ -25,6 +25,7 @@ find_package(OpenSSL REQUIRED)
 option(ENABLE_AF_ALG      "Build AF_ALG hook (Linux kernel crypto sockets)" ON)
 option(ENABLE_CRYPTODEV   "Build cryptodev hook (ioctl-based)"              OFF)
 option(ENABLE_LIBSODIUM   "Build libsodium hooks"                           ON)
+option(ENABLE_MBEDTLS     "Build mbedTLS demos"                             ON)
 option(HOOK_VERBOSE       "Verbose logging inside hooks"                    OFF)
 option(HOOK_MASK          "Mask key/iv/tag in NDJSON (hash/trunc)"          OFF)
 
@@ -133,6 +134,36 @@ if(ENABLE_LIBSODIUM)
     endif()
 endif()
 
+set(MBEDTLS_FOUND OFF)
+if(ENABLE_MBEDTLS)
+    find_path(MBEDTLS_INCLUDE_DIR mbedtls/gcm.h)
+    find_library(MBEDTLS_CRYPTO_LIBRARY mbedcrypto)
+    find_library(MBEDTLS_TLS_LIBRARY mbedtls)
+    find_library(MBEDTLS_X509_LIBRARY mbedx509)
+    if(MBEDTLS_INCLUDE_DIR AND MBEDTLS_CRYPTO_LIBRARY)
+        set(MBEDTLS_FOUND ON)
+        include_directories(${MBEDTLS_INCLUDE_DIR})
+        target_sources(hook PRIVATE src/Linux/hooks/hook_mbedtls.cpp)
+        add_executable(mbedtls_aes_gcm_demo tests/mbedTLS/symmetric/mbedtls_aes_gcm_demo.c)
+        target_link_libraries(mbedtls_aes_gcm_demo PRIVATE ${MBEDTLS_CRYPTO_LIBRARY})
+
+        add_executable(mbedtls_hmac_sha256_demo tests/mbedTLS/hash/mbedtls_hmac_sha256_demo.c)
+        target_link_libraries(mbedtls_hmac_sha256_demo PRIVATE ${MBEDTLS_CRYPTO_LIBRARY})
+
+        if(MBEDTLS_TLS_LIBRARY AND MBEDTLS_X509_LIBRARY)
+            add_executable(mbedtls_ecdsa_demo tests/mbedTLS/pk/mbedtls_ecdsa_demo.c)
+            target_link_libraries(mbedtls_ecdsa_demo PRIVATE ${MBEDTLS_CRYPTO_LIBRARY} ${MBEDTLS_X509_LIBRARY} ${MBEDTLS_TLS_LIBRARY})
+
+            add_executable(mbedtls_rsa_demo tests/mbedTLS/pk/mbedtls_rsa_demo.c)
+            target_link_libraries(mbedtls_rsa_demo PRIVATE ${MBEDTLS_CRYPTO_LIBRARY} ${MBEDTLS_X509_LIBRARY} ${MBEDTLS_TLS_LIBRARY})
+        else()
+            message(WARNING "mbedtls tls/x509 libraries not found; skipping pk demos")
+        endif()
+    else()
+        message(WARNING "mbedTLS headers or library not found; skipping mbedtls demos")
+    endif()
+endif()
+
 if(ENABLE_AF_ALG)
     check_include_file("linux/if_alg.h" HAVE_LINUX_IF_ALG_H)
     if(HAVE_LINUX_IF_ALG_H)
@@ -188,6 +219,17 @@ if(LIBSODIUM_FOUND)
         libsodium_box_demo
         libsodium_sign_demo)
 endif()
+if(MBEDTLS_FOUND)
+    list(APPEND TEST_TARGETS
+        mbedtls_aes_gcm_demo
+        mbedtls_hmac_sha256_demo)
+    if(TARGET mbedtls_ecdsa_demo)
+        list(APPEND TEST_TARGETS mbedtls_ecdsa_demo)
+    endif()
+    if(TARGET mbedtls_rsa_demo)
+        list(APPEND TEST_TARGETS mbedtls_rsa_demo)
+    endif()
+endif()
 if(ENABLE_AF_ALG AND HAVE_LINUX_IF_ALG_H)
     list(APPEND TEST_TARGETS
         af_alg_skcipher_aes_cbc_demo
@@ -207,6 +249,10 @@ foreach(tgt IN LISTS TEST_TARGETS)
      NOT tgt STREQUAL "libsodium_secretbox_demo" AND
      NOT tgt STREQUAL "libsodium_box_demo" AND
      NOT tgt STREQUAL "libsodium_sign_demo" AND
+     NOT tgt STREQUAL "mbedtls_aes_gcm_demo" AND
+     NOT tgt STREQUAL "mbedtls_hmac_sha256_demo" AND
+     NOT tgt STREQUAL "mbedtls_ecdsa_demo" AND
+     NOT tgt STREQUAL "mbedtls_rsa_demo" AND
      NOT tgt STREQUAL "af_alg_skcipher_aes_cbc_demo" AND
      NOT tgt STREQUAL "af_alg_aes_gcm_demo" AND
      NOT tgt STREQUAL "af_alg_hmac_sha256_demo" AND

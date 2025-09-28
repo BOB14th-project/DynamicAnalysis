@@ -33,6 +33,10 @@ OPTIONAL_TESTS+=(
   libsodium_secretbox_demo
   libsodium_box_demo
   libsodium_sign_demo
+  mbedtls_aes_gcm_demo
+  mbedtls_hmac_sha256_demo
+  mbedtls_ecdsa_demo
+  mbedtls_rsa_demo
   af_alg_skcipher_aes_cbc_demo
   af_alg_aes_gcm_demo
   af_alg_hmac_sha256_demo
