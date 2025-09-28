@@ -67,9 +67,7 @@ const char* describe_aead(const EVP_AEAD* aead) {
     if (aead == EVP_aead_aes_256_gcm()) return "AES-256-GCM";
     if (aead == EVP_aead_aes_128_gcm()) return "AES-128-GCM";
     if (aead == EVP_aead_chacha20_poly1305()) return "CHACHA20-POLY1305";
-#if defined(EVP_aead_xchacha20_poly1305)
     if (aead == EVP_aead_xchacha20_poly1305()) return "XCHACHA20-POLY1305";
-#endif
     return "AEAD";
 }
 

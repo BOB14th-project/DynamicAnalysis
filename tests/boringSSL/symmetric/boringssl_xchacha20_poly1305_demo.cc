@@ -10,7 +10,6 @@
 #include <cstring>
 
 int main() {
-#ifdef EVP_aead_xchacha20_poly1305
     uint8_t key[32];
     uint8_t nonce[24];
     RAND_bytes(key, sizeof(key));
@@ -45,8 +44,4 @@ int main() {
     EVP_AEAD_CTX_cleanup(&ctx);
     std::printf("ct_len=%zu first=0x%02x\n", ciphertext_len, ciphertext[0]);
     return 0;
-#else
-    std::fprintf(stderr, "XChaCha20-Poly1305 not enabled in this BoringSSL build\n");
-    return 0;
-#endif
 }
