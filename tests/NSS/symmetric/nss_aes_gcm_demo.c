@@ -3,10 +3,10 @@
 // Build (requires NSS development headers/libraries):
 //   gcc nss_aes_gcm_demo.c -lnss3 -lnspr4 -lplds4 -lplc4 -o nss_aes_gcm_demo
 
-#include <nss.h>
-#include <pk11pub.h>
-#include <secerr.h>
-#include <prinit.h>
+#include <nss/nss.h>
+#include <nss/pk11pub.h>
+#include <nss/secerr.h>
+#include <nspr/prinit.h>
 #include <stdio.h>
 #include <string.h>
 

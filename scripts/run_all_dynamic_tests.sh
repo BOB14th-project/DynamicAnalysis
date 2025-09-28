@@ -36,6 +36,9 @@ OPTIONAL_TESTS+=(
   gnutls_aes_gcm_demo
   gnutls_aes_gcm_roundtrip_demo
   gnutls_aes_cbc_demo
+  nss_aes_gcm_demo
+  nss_aes_gcm_roundtrip_demo
+  nss_aes_cbc_demo
   mbedtls_aes_gcm_demo
   mbedtls_hmac_sha256_demo
   mbedtls_ecdsa_demo

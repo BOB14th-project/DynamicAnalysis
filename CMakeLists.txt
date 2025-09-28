@@ -156,6 +156,33 @@ else()
     message(WARNING "GnuTLS headers or library not found; skipping gnutls demo build")
 endif()
 
+set(NSS_FOUND OFF)
+find_path(NSS_INCLUDE_DIR NAMES nss.h PATH_SUFFIXES nss)
+find_path(NSPR_INCLUDE_DIR NAMES prio.h PATH_SUFFIXES nspr nspr4)
+find_path(P11KIT_INCLUDE_DIR NAMES p11-kit/pkcs11.h PATH_SUFFIXES p11-kit p11-kit-1)
+find_library(NSS3_LIBRARY nss3)
+find_library(NSPR4_LIBRARY nspr4)
+find_library(PLDS4_LIBRARY plds4)
+find_library(PLC4_LIBRARY plc4)
+if(NSS_INCLUDE_DIR AND NSPR_INCLUDE_DIR AND P11KIT_INCLUDE_DIR AND NSS3_LIBRARY AND NSPR4_LIBRARY AND PLDS4_LIBRARY AND PLC4_LIBRARY)
+    set(NSS_FOUND ON)
+    include_directories(${NSS_INCLUDE_DIR} ${NSPR_INCLUDE_DIR} ${P11KIT_INCLUDE_DIR})
+    target_sources(hook PRIVATE src/Linux/hooks/hook_nss.cpp)
+    add_executable(nss_aes_gcm_demo tests/NSS/symmetric/nss_aes_gcm_demo.c)
+    target_include_directories(nss_aes_gcm_demo PRIVATE ${NSS_INCLUDE_DIR})
+    target_link_libraries(nss_aes_gcm_demo PRIVATE ${NSS3_LIBRARY} ${NSPR4_LIBRARY} ${PLDS4_LIBRARY} ${PLC4_LIBRARY})
+
+    add_executable(nss_aes_gcm_roundtrip_demo tests/NSS/symmetric/nss_aes_gcm_roundtrip_demo.c)
+    target_include_directories(nss_aes_gcm_roundtrip_demo PRIVATE ${NSS_INCLUDE_DIR})
+    target_link_libraries(nss_aes_gcm_roundtrip_demo PRIVATE ${NSS3_LIBRARY} ${NSPR4_LIBRARY} ${PLDS4_LIBRARY} ${PLC4_LIBRARY})
+
+    add_executable(nss_aes_cbc_demo tests/NSS/symmetric/nss_aes_cbc_demo.c)
+    target_include_directories(nss_aes_cbc_demo PRIVATE ${NSS_INCLUDE_DIR})
+    target_link_libraries(nss_aes_cbc_demo PRIVATE ${NSS3_LIBRARY} ${NSPR4_LIBRARY} ${PLDS4_LIBRARY} ${PLC4_LIBRARY})
+else()
+    message(WARNING "NSS headers or libraries not found; skipping NSS demo build")
+endif()
+
 set(MBEDTLS_FOUND OFF)
 if(ENABLE_MBEDTLS)
     find_path(MBEDTLS_INCLUDE_DIR mbedtls/gcm.h)
@@ -247,6 +274,12 @@ if(GNUTLS_FOUND)
         gnutls_aes_gcm_roundtrip_demo
         gnutls_aes_cbc_demo)
 endif()
+if(NSS_FOUND)
+    list(APPEND TEST_TARGETS
+        nss_aes_gcm_demo
+        nss_aes_gcm_roundtrip_demo
+        nss_aes_cbc_demo)
+endif()
 if(MBEDTLS_FOUND)
     list(APPEND TEST_TARGETS
         mbedtls_aes_gcm_demo
@@ -280,6 +313,9 @@ foreach(tgt IN LISTS TEST_TARGETS)
      NOT tgt STREQUAL "gnutls_aes_gcm_demo" AND
      NOT tgt STREQUAL "gnutls_aes_gcm_roundtrip_demo" AND
      NOT tgt STREQUAL "gnutls_aes_cbc_demo" AND
+     NOT tgt STREQUAL "nss_aes_gcm_demo" AND
+     NOT tgt STREQUAL "nss_aes_gcm_roundtrip_demo" AND
+     NOT tgt STREQUAL "nss_aes_cbc_demo" AND
      NOT tgt STREQUAL "mbedtls_aes_gcm_demo" AND
      NOT tgt STREQUAL "mbedtls_hmac_sha256_demo" AND
      NOT tgt STREQUAL "mbedtls_ecdsa_demo" AND
