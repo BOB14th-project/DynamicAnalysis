@@ -1,0 +1,206 @@
+// src/Linux/hooks/hook_libsodium.cpp
+#include "pch.h"
+#include "output.h"
+#include "resolver.h"
+#include "reentry_guard.h"
+
+namespace {
+
+constexpr const char* SURFACE = "libsodium";
+
+struct AEADConfig {
+    const char* cipher_name;
+    size_t key_len;
+    size_t nonce_len;
+    size_t tag_len;
+};
+
+constexpr AEADConfig kChacha20Poly1305Ietf{ "chacha20poly1305-ietf", 32, 12, 16 };
+constexpr AEADConfig kXChacha20Poly1305Ietf{ "xchacha20poly1305-ietf", 32, 24, 16 };
+
+#define STRINGIFY_INTERNAL(x) #x
+#define STRINGIFY(x) STRINGIFY_INTERNAL(x)
+
+#define RESOLVE_SYM(var, name_literal)                                            \
+    do {                                                                          \
+        if (!(var)) {                                                             \
+            (var) = reinterpret_cast<decltype(var)>(resolve_next_symbol(name_literal)); \
+        }                                                                         \
+    } while (0)
+
+void log_event(const AEADConfig& cfg,
+               const char* api,
+               const char* dir,
+               const unsigned char* key,
+               size_t key_len,
+               const unsigned char* nonce,
+               size_t nonce_len,
+               const unsigned char* tag,
+               size_t tag_len) {
+    ndjson_log_key_event(
+        SURFACE,
+        api,
+        dir,
+        cfg.cipher_name,
+        key_len ? key : nullptr,
+        static_cast<int>(key_len),
+        nonce_len ? nonce : nullptr,
+        static_cast<int>(nonce_len),
+        tag_len ? tag : nullptr,
+        static_cast<int>(tag_len));
+}
+
+} // namespace
+
+#define AEAD_ENC_PARAMS                                                            \
+    unsigned char* c,                                                              \
+    unsigned long long* clen_p,                                                    \
+    const unsigned char* m,                                                        \
+    unsigned long long mlen,                                                       \
+    const unsigned char* ad,                                                       \
+    unsigned long long adlen,                                                      \
+    const unsigned char* nsec,                                                     \
+    const unsigned char* npub,                                                     \
+    const unsigned char* k
+
+#define AEAD_DEC_PARAMS                                                            \
+    unsigned char* m,                                                              \
+    unsigned long long* mlen_p,                                                    \
+    unsigned char* nsec,                                                           \
+    const unsigned char* c,                                                        \
+    unsigned long long clen,                                                       \
+    const unsigned char* ad,                                                       \
+    unsigned long long adlen,                                                      \
+    const unsigned char* npub,                                                     \
+    const unsigned char* k
+
+#define AEAD_ENC_DETACHED_PARAMS                                                   \
+    unsigned char* c,                                                              \
+    unsigned char* mac,                                                            \
+    unsigned long long* maclen_p,                                                  \
+    const unsigned char* m,                                                        \
+    unsigned long long mlen,                                                       \
+    const unsigned char* ad,                                                       \
+    unsigned long long adlen,                                                      \
+    const unsigned char* nsec,                                                     \
+    const unsigned char* npub,                                                     \
+    const unsigned char* k
+
+#define AEAD_DEC_DETACHED_PARAMS                                                   \
+    unsigned char* m,                                                              \
+    unsigned char* nsec,                                                           \
+    const unsigned char* c,                                                        \
+    unsigned long long clen,                                                       \
+    const unsigned char* mac,                                                      \
+    const unsigned char* ad,                                                       \
+    unsigned long long adlen,                                                      \
+    const unsigned char* npub,                                                     \
+    const unsigned char* k
+
+#define DEFINE_AEAD_ATTACHED_HOOK(PREFIX, CONFIG)                                  \
+    using fn_##PREFIX##_encrypt = int (*)(AEAD_ENC_PARAMS);                         \
+    using fn_##PREFIX##_decrypt = int (*)(AEAD_DEC_PARAMS);                         \
+    static fn_##PREFIX##_encrypt real_##PREFIX##_encrypt = nullptr;                 \
+    static fn_##PREFIX##_decrypt real_##PREFIX##_decrypt = nullptr;                 \
+                                                                                    \
+    extern "C" int PREFIX##_encrypt(AEAD_ENC_PARAMS) {                             \
+        RESOLVE_SYM(real_##PREFIX##_encrypt, STRINGIFY(PREFIX##_encrypt));          \
+        if (!real_##PREFIX##_encrypt) return -1;                                    \
+        ReentryGuard guard;                                                         \
+        if (!guard) {                                                               \
+            return real_##PREFIX##_encrypt(c, clen_p, m, mlen, ad, adlen, nsec, npub, k); \
+        }                                                                           \
+        int ret = real_##PREFIX##_encrypt(c, clen_p, m, mlen, ad, adlen, nsec, npub, k); \
+        if (ret == 0) {                                                             \
+            const AEADConfig& cfg = (CONFIG);                                       \
+            const size_t tag_len = cfg.tag_len;                                     \
+            const unsigned char* tag_ptr = (tag_len > 0 && c && clen_p && *clen_p >= tag_len) \
+                ? c + (*clen_p - tag_len)                                          \
+                : nullptr;                                                          \
+            log_event(cfg, STRINGIFY(PREFIX##_encrypt), "enc",                     \
+                      k, k ? cfg.key_len : 0,                                       \
+                      npub, npub ? cfg.nonce_len : 0,                               \
+                      tag_ptr, tag_ptr ? tag_len : 0);                              \
+        }                                                                           \
+        return ret;                                                                 \
+    }                                                                               \
+                                                                                    \
+    extern "C" int PREFIX##_decrypt(AEAD_DEC_PARAMS) {                             \
+        RESOLVE_SYM(real_##PREFIX##_decrypt, STRINGIFY(PREFIX##_decrypt));          \
+        if (!real_##PREFIX##_decrypt) return -1;                                    \
+        ReentryGuard guard;                                                         \
+        if (!guard) {                                                               \
+            return real_##PREFIX##_decrypt(m, mlen_p, nsec, c, clen, ad, adlen, npub, k); \
+        }                                                                           \
+        int ret = real_##PREFIX##_decrypt(m, mlen_p, nsec, c, clen, ad, adlen, npub, k); \
+        if (ret == 0) {                                                             \
+            const AEADConfig& cfg = (CONFIG);                                       \
+            const size_t tag_len = cfg.tag_len;                                     \
+            const unsigned char* tag_ptr = (tag_len > 0 && c && clen >= tag_len)    \
+                ? c + (clen - tag_len)                                              \
+                : nullptr;                                                          \
+            log_event(cfg, STRINGIFY(PREFIX##_decrypt), "dec",                     \
+                      k, k ? cfg.key_len : 0,                                       \
+                      npub, npub ? cfg.nonce_len : 0,                               \
+                      tag_ptr, tag_ptr ? tag_len : 0);                              \
+        }                                                                           \
+        return ret;                                                                 \
+    }
+
+#define DEFINE_AEAD_DETACHED_HOOK(PREFIX, CONFIG)                                   \
+    using fn_##PREFIX##_encrypt_detached = int (*)(AEAD_ENC_DETACHED_PARAMS);       \
+    using fn_##PREFIX##_decrypt_detached = int (*)(AEAD_DEC_DETACHED_PARAMS);       \
+    static fn_##PREFIX##_encrypt_detached real_##PREFIX##_encrypt_detached = nullptr; \
+    static fn_##PREFIX##_decrypt_detached real_##PREFIX##_decrypt_detached = nullptr; \
+                                                                                    \
+    extern "C" int PREFIX##_encrypt_detached(AEAD_ENC_DETACHED_PARAMS) {           \
+        RESOLVE_SYM(real_##PREFIX##_encrypt_detached,                               \
+                    STRINGIFY(PREFIX##_encrypt_detached));                          \
+        if (!real_##PREFIX##_encrypt_detached) return -1;                           \
+        ReentryGuard guard;                                                         \
+        if (!guard) {                                                               \
+            return real_##PREFIX##_encrypt_detached(c, mac, maclen_p, m, mlen, ad, adlen, nsec, npub, k); \
+        }                                                                           \
+        int ret = real_##PREFIX##_encrypt_detached(c, mac, maclen_p, m, mlen, ad, adlen, nsec, npub, k); \
+        if (ret == 0) {                                                             \
+            const AEADConfig& cfg = (CONFIG);                                       \
+            size_t tag_len = 0;                                                     \
+            if (mac && maclen_p && *maclen_p > 0) {                                 \
+                tag_len = static_cast<size_t>(*maclen_p);                           \
+            } else if (mac) {                                                       \
+                tag_len = cfg.tag_len;                                              \
+            }                                                                       \
+            log_event(cfg, STRINGIFY(PREFIX##_encrypt_detached), "enc",            \
+                      k, k ? cfg.key_len : 0,                                       \
+                      npub, npub ? cfg.nonce_len : 0,                               \
+                      mac, tag_len);                                                \
+        }                                                                           \
+        return ret;                                                                 \
+    }                                                                               \
+                                                                                    \
+    extern "C" int PREFIX##_decrypt_detached(AEAD_DEC_DETACHED_PARAMS) {           \
+        RESOLVE_SYM(real_##PREFIX##_decrypt_detached,                               \
+                    STRINGIFY(PREFIX##_decrypt_detached));                          \
+        if (!real_##PREFIX##_decrypt_detached) return -1;                           \
+        ReentryGuard guard;                                                         \
+        if (!guard) {                                                               \
+            return real_##PREFIX##_decrypt_detached(m, nsec, c, clen, mac, ad, adlen, npub, k); \
+        }                                                                           \
+        int ret = real_##PREFIX##_decrypt_detached(m, nsec, c, clen, mac, ad, adlen, npub, k); \
+        if (ret == 0) {                                                             \
+            const AEADConfig& cfg = (CONFIG);                                       \
+            const size_t tag_len = mac ? cfg.tag_len : 0;                           \
+            log_event(cfg, STRINGIFY(PREFIX##_decrypt_detached), "dec",            \
+                      k, k ? cfg.key_len : 0,                                       \
+                      npub, npub ? cfg.nonce_len : 0,                               \
+                      mac, tag_len);                                                \
+        }                                                                           \
+        return ret;                                                                 \
+    }
+
+DEFINE_AEAD_ATTACHED_HOOK(crypto_aead_chacha20poly1305_ietf, kChacha20Poly1305Ietf)
+DEFINE_AEAD_DETACHED_HOOK(crypto_aead_chacha20poly1305_ietf, kChacha20Poly1305Ietf)
+
+DEFINE_AEAD_ATTACHED_HOOK(crypto_aead_xchacha20poly1305_ietf, kXChacha20Poly1305Ietf)
+DEFINE_AEAD_DETACHED_HOOK(crypto_aead_xchacha20poly1305_ietf, kXChacha20Poly1305Ietf)
+

@@ -28,9 +28,9 @@ cmake --build build -j
    ```bash
    export HOOK_NDJSON="$PWD/logs/analysis.ndjson"
    ```
-2. 동적 분석 실행 (예: AES CBC 테스트)
+2. 동적 분석 실행 (예: OpenSSL AES CBC 테스트)
    ```bash
-   ./build/bin/dynamic_analysis_cli ./build/bin/aes_lib_test
+   ./build/bin/dynamic_analysis_cli ./build/bin/openssl_aes_lib_test
    ```
    모든 샘플을 한 번에 돌려보고 싶다면 다음 스크립트를 사용할 수 있습니다.
    ```bash
@@ -61,7 +61,8 @@ cmake --build build -j
 - **cryptodev**
   - `tests/cryptodev/ioctl/cryptodev_aes_cbc_demo.c` : `/dev/crypto` ioctl 기반 AES-256-CBC 암복호화
 - **libsodium**
-  - `tests/libsodium/aead/chacha20_poly1305_demo.c` : `crypto_aead_chacha20poly1305_ietf_encrypt`
+  - `tests/libsodium/aead/chacha20_poly1305_demo.c` : `crypto_aead_chacha20poly1305_ietf_*`
+  - `tests/libsodium/aead/xchacha20_poly1305_demo.c` : `crypto_aead_xchacha20poly1305_ietf_*`
 - **GnuTLS**
   - `tests/GnuTLS/symmetric/gnutls_aes_gcm_demo.c` : `gnutls_cipher_*` AES-256-GCM 호출
 - **NSS**

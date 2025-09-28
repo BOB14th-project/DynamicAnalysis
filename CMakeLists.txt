@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(ldpreload_hook LANGUAGES CXX)
+project(ldpreload_hook LANGUAGES C CXX)
 
 # ── 공통 설정
 set(CMAKE_CXX_STANDARD 17)
@@ -22,6 +22,7 @@ find_package(OpenSSL REQUIRED)
 # ── 빌드 옵션
 option(ENABLE_AF_ALG      "Build AF_ALG hook (Linux kernel crypto sockets)" ON)
 option(ENABLE_CRYPTODEV   "Build cryptodev hook (ioctl-based)"              OFF)
+option(ENABLE_LIBSODIUM   "Build libsodium hooks"                           ON)
 option(HOOK_VERBOSE       "Verbose logging inside hooks"                    OFF)
 option(HOOK_MASK          "Mask key/iv/tag in NDJSON (hash/trunc)"          OFF)
 
@@ -58,6 +59,10 @@ if(UNIX)
         src/Linux/hooks/hook_openssl_ecc.cpp
     )
 
+    if(ENABLE_LIBSODIUM)
+        list(APPEND HOOK_SRCS src/Linux/hooks/hook_libsodium.cpp)
+    endif()
+
     if(ENABLE_AF_ALG)
         list(APPEND HOOK_SRCS src/Linux/hooks/hook_af_alg.cpp)
     endif()
@@ -88,13 +93,32 @@ if(JNI_FOUND)
 endif()
 
 # ── OpenSSL 테스트 (암호화 경로별 커버리지)
-add_executable(demo_target                  tests/openssl/demo/demo_target.cpp)
-add_executable(aes_lib_test                 tests/openssl/symmetric/aes_lib_test.cpp)
-add_executable(symm_aes_gcm_test            tests/openssl/aead/symm_aes_gcm_test.cpp)
-add_executable(ecc_sign_test                tests/openssl/ecc/ecc_sign_test.cpp)
-add_executable(ecc_ECIES_test               tests/openssl/ecc/ecc_ECIES_test.cpp)
-add_executable(openssl3_ex2_test            tests/openssl/provider/openssl3_ex2_test.cpp)
-add_executable(openssl3_ex2_params_test     tests/openssl/provider/openssl3_ex2_params_test.cpp)
+add_executable(openssl_demo_target                  tests/openssl/demo/demo_target.cpp)
+add_executable(openssl_aes_lib_test                 tests/openssl/symmetric/aes_lib_test.cpp)
+add_executable(openssl_symm_aes_gcm_test            tests/openssl/aead/symm_aes_gcm_test.cpp)
+add_executable(openssl_ecc_sign_test                tests/openssl/ecc/ecc_sign_test.cpp)
+add_executable(openssl_ecc_ecies_test               tests/openssl/ecc/ecc_ECIES_test.cpp)
+add_executable(openssl_provider_ex2_test            tests/openssl/provider/openssl3_ex2_test.cpp)
+add_executable(openssl_provider_ex2_params_test     tests/openssl/provider/openssl3_ex2_params_test.cpp)
+
+# ── libsodium 테스트 (선택적)
+set(LIBSODIUM_FOUND OFF)
+if(ENABLE_LIBSODIUM)
+    find_path(LIBSODIUM_INCLUDE_DIR sodium.h)
+    find_library(LIBSODIUM_LIBRARY sodium)
+    if(LIBSODIUM_INCLUDE_DIR AND LIBSODIUM_LIBRARY)
+        set(LIBSODIUM_FOUND ON)
+        add_executable(libsodium_chacha20_poly1305_demo tests/libsodium/aead/chacha20_poly1305_demo.c)
+        target_include_directories(libsodium_chacha20_poly1305_demo PRIVATE ${LIBSODIUM_INCLUDE_DIR})
+        target_link_libraries(libsodium_chacha20_poly1305_demo PRIVATE ${LIBSODIUM_LIBRARY})
+
+        add_executable(libsodium_xchacha20_poly1305_demo tests/libsodium/aead/xchacha20_poly1305_demo.c)
+        target_include_directories(libsodium_xchacha20_poly1305_demo PRIVATE ${LIBSODIUM_INCLUDE_DIR})
+        target_link_libraries(libsodium_xchacha20_poly1305_demo PRIVATE ${LIBSODIUM_LIBRARY})
+    else()
+        message(WARNING "libsodium headers or library not found; skipping libsodium demo build")
+    endif()
+endif()
 
 # ── 동적 분석 CLI (LD_PRELOAD 주입 자동화)
 add_executable(dynamic_analysis_cli src/main.cpp src/dynamic_analysis.cpp)
@@ -111,29 +135,35 @@ endif()
 
 # 테스트 타깃에도 PCH 적용
 set(TEST_TARGETS
-    demo_target
-    aes_lib_test
-    symm_aes_gcm_test
-    ecc_sign_test
-    ecc_ECIES_test
-    openssl3_ex2_test
-    openssl3_ex2_params_test
+    openssl_demo_target
+    openssl_aes_lib_test
+    openssl_symm_aes_gcm_test
+    openssl_ecc_sign_test
+    openssl_ecc_ecies_test
+    openssl_provider_ex2_test
+    openssl_provider_ex2_params_test
     dynamic_analysis_cli)
 if(JNI_FOUND)
     list(APPEND TEST_TARGETS java_process_detector)
 endif()
+if(LIBSODIUM_FOUND)
+    list(APPEND TEST_TARGETS libsodium_chacha20_poly1305_demo libsodium_xchacha20_poly1305_demo)
+endif()
 
 foreach(tgt IN LISTS TEST_TARGETS)
-  target_precompile_headers(${tgt} PRIVATE ${CMAKE_SOURCE_DIR}/include/pch.h)
+  if(NOT tgt STREQUAL "libsodium_chacha20_poly1305_demo" AND
+     NOT tgt STREQUAL "libsodium_xchacha20_poly1305_demo")
+    target_precompile_headers(${tgt} PRIVATE ${CMAKE_SOURCE_DIR}/include/pch.h)
+  endif()
 endforeach()
 
 set(OPENSSL_CRYPTO_TARGETS
-    aes_lib_test
-    symm_aes_gcm_test
-    ecc_sign_test
-    ecc_ECIES_test
-    openssl3_ex2_test
-    openssl3_ex2_params_test)
+    openssl_aes_lib_test
+    openssl_symm_aes_gcm_test
+    openssl_ecc_sign_test
+    openssl_ecc_ecies_test
+    openssl_provider_ex2_test
+    openssl_provider_ex2_params_test)
 
 foreach(tgt IN LISTS OPENSSL_CRYPTO_TARGETS)
     target_link_libraries(${tgt} PRIVATE OpenSSL::Crypto)
@@ -141,4 +171,4 @@ endforeach()
 
 # ── 사용 힌트
 message(STATUS "Build:  cmake -S . -B build && cmake --build build -j")
-message(STATUS "Run:    HOOK_VERBOSE=1 LD_PRELOAD=${CMAKE_BINARY_DIR}/lib/libhook.so ${CMAKE_BINARY_DIR}/bin/aes_lib_test")
+message(STATUS "Run:    HOOK_VERBOSE=1 LD_PRELOAD=${CMAKE_BINARY_DIR}/lib/libhook.so ${CMAKE_BINARY_DIR}/bin/openssl_aes_lib_test")

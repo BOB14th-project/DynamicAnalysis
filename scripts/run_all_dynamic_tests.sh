@@ -15,17 +15,20 @@ if [[ ! -x "$CLI" ]]; then
 fi
 
 TESTS=(
-  aes_lib_test
-  symm_aes_gcm_test
-  ecc_sign_test
-  ecc_ECIES_test
-  openssl3_ex2_test
-  openssl3_ex2_params_test
-  demo_target
+  openssl_aes_lib_test
+  openssl_symm_aes_gcm_test
+  openssl_ecc_sign_test
+  openssl_ecc_ecies_test
+  openssl_provider_ex2_test
+  openssl_provider_ex2_params_test
+  openssl_demo_target
 )
 
 # Include Java detector only if it was built (requires JNI).
 OPTIONAL_TESTS=(java_process_detector)
+
+# libsodium demo is optional: build depends on having libsodium headers.
+OPTIONAL_TESTS+=(libsodium_chacha20_poly1305_demo libsodium_xchacha20_poly1305_demo)
 
 STATUS=0
 
