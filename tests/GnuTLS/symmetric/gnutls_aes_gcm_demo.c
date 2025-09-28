@@ -11,22 +11,34 @@
 int main(void) {
     gnutls_datum_t key = { .data = (unsigned char*)"0123456789abcdef0123456789abcdef", .size = 32 };
     unsigned char iv[12] = {0};
+    gnutls_datum_t iv_datum = { .data = iv, .size = sizeof(iv) };
     unsigned char tag[16];
-    const char* msg = "hello from gnutls";
-    unsigned char out[64];
-    size_t out_len = 0;
+    const unsigned char* msg = (const unsigned char*)"hello from gnutls";
+    size_t msg_len = strlen((const char*)msg);
+    unsigned char out[64] = {0};
 
     gnutls_cipher_hd_t handle;
-    if (gnutls_cipher_init(&handle, GNUTLS_CIPHER_AES_256_GCM, &key, &key) < 0) {
+    if (gnutls_cipher_init(&handle, GNUTLS_CIPHER_AES_256_GCM, &key, &iv_datum) < 0) {
         fprintf(stderr, "cipher init failed\n");
         return 1;
     }
-    gnutls_cipher_add_auth(handle, (const unsigned char*)msg, strlen(msg));
-    gnutls_cipher_encrypt(handle, (const unsigned char*)msg, out, strlen(msg));
-    gnutls_cipher_tag(handle, tag, sizeof(tag));
+    if (gnutls_cipher_add_auth(handle, msg, msg_len) < 0) {
+        fprintf(stderr, "cipher add auth failed\n");
+        gnutls_cipher_deinit(handle);
+        return 1;
+    }
+    if (gnutls_cipher_encrypt2(handle, msg, msg_len, out, msg_len) < 0) {
+        fprintf(stderr, "cipher encrypt failed\n");
+        gnutls_cipher_deinit(handle);
+        return 1;
+    }
+    if (gnutls_cipher_tag(handle, tag, sizeof(tag)) < 0) {
+        fprintf(stderr, "cipher tag failed\n");
+        gnutls_cipher_deinit(handle);
+        return 1;
+    }
 
-    out_len = strlen(msg);
-    printf("ciphertext len=%zu first=0x%02x tag0=0x%02x\n", out_len, out[0], tag[0]);
+    printf("ciphertext len=%zu first=0x%02x tag0=0x%02x\n", msg_len, out[0], tag[0]);
 
     gnutls_cipher_deinit(handle);
     return 0;

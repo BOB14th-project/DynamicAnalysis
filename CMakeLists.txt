@@ -134,6 +134,28 @@ if(ENABLE_LIBSODIUM)
     endif()
 endif()
 
+set(GNUTLS_FOUND OFF)
+find_path(GNUTLS_INCLUDE_DIR gnutls/crypto.h)
+find_library(GNUTLS_LIBRARY gnutls)
+if(GNUTLS_INCLUDE_DIR AND GNUTLS_LIBRARY)
+    set(GNUTLS_FOUND ON)
+    include_directories(${GNUTLS_INCLUDE_DIR})
+    target_sources(hook PRIVATE src/Linux/hooks/hook_gnutls.cpp)
+    add_executable(gnutls_aes_gcm_demo tests/GnuTLS/symmetric/gnutls_aes_gcm_demo.c)
+    target_include_directories(gnutls_aes_gcm_demo PRIVATE ${GNUTLS_INCLUDE_DIR})
+    target_link_libraries(gnutls_aes_gcm_demo PRIVATE ${GNUTLS_LIBRARY})
+
+    add_executable(gnutls_aes_gcm_roundtrip_demo tests/GnuTLS/symmetric/gnutls_aes_gcm_roundtrip_demo.c)
+    target_include_directories(gnutls_aes_gcm_roundtrip_demo PRIVATE ${GNUTLS_INCLUDE_DIR})
+    target_link_libraries(gnutls_aes_gcm_roundtrip_demo PRIVATE ${GNUTLS_LIBRARY})
+
+    add_executable(gnutls_aes_cbc_demo tests/GnuTLS/symmetric/gnutls_aes_cbc_demo.c)
+    target_include_directories(gnutls_aes_cbc_demo PRIVATE ${GNUTLS_INCLUDE_DIR})
+    target_link_libraries(gnutls_aes_cbc_demo PRIVATE ${GNUTLS_LIBRARY})
+else()
+    message(WARNING "GnuTLS headers or library not found; skipping gnutls demo build")
+endif()
+
 set(MBEDTLS_FOUND OFF)
 if(ENABLE_MBEDTLS)
     find_path(MBEDTLS_INCLUDE_DIR mbedtls/gcm.h)
@@ -219,6 +241,12 @@ if(LIBSODIUM_FOUND)
         libsodium_box_demo
         libsodium_sign_demo)
 endif()
+if(GNUTLS_FOUND)
+    list(APPEND TEST_TARGETS
+        gnutls_aes_gcm_demo
+        gnutls_aes_gcm_roundtrip_demo
+        gnutls_aes_cbc_demo)
+endif()
 if(MBEDTLS_FOUND)
     list(APPEND TEST_TARGETS
         mbedtls_aes_gcm_demo
@@ -249,6 +277,9 @@ foreach(tgt IN LISTS TEST_TARGETS)
      NOT tgt STREQUAL "libsodium_secretbox_demo" AND
      NOT tgt STREQUAL "libsodium_box_demo" AND
      NOT tgt STREQUAL "libsodium_sign_demo" AND
+     NOT tgt STREQUAL "gnutls_aes_gcm_demo" AND
+     NOT tgt STREQUAL "gnutls_aes_gcm_roundtrip_demo" AND
+     NOT tgt STREQUAL "gnutls_aes_cbc_demo" AND
      NOT tgt STREQUAL "mbedtls_aes_gcm_demo" AND
      NOT tgt STREQUAL "mbedtls_hmac_sha256_demo" AND
      NOT tgt STREQUAL "mbedtls_ecdsa_demo" AND
