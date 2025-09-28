@@ -25,8 +25,8 @@ struct fd_ctx {
   bool is_afalg=false, is_op=false;
   char type[16]{0};   // "skcipher"/"aead"/"hash"
   char name[64]{0};   // "gcm(aes)" 등
-  unsigned char key[64]; int keylen=0;
-  unsigned char iv[64];  int ivlen=0;
+  unsigned char key[512]; int keylen=0;
+  unsigned char iv[64];   int ivlen=0;
   int op_dir=0; // ALG_OP_ENCRYPT=1, DECRYPT=2
 };
 static fd_ctx g_ctx[65536];
@@ -89,6 +89,16 @@ extern "C" int setsockopt(int fd, int level, int optname, const void* optval, so
           c->key, c->keylen, nullptr, 0, nullptr, 0);
       } else if (optname == ALG_SET_OP && optval && optlen >= (socklen_t)sizeof(int)) {
         c->op_dir = *(const int*)optval;
+        ndjson_log_key_event(SURFACE, "setsockopt", c->op_dir == ALG_OP_ENCRYPT ? "ALG_SET_OP_ENCRYPT" : "ALG_SET_OP_DECRYPT",
+          c->name, nullptr, 0, nullptr, 0, nullptr, 0);
+      } else if (optname == ALG_SET_AEAD_ASSOCLEN && optval && optlen >= (socklen_t)sizeof(__u32)) {
+        __u32 assoc = *(__u32*)optval;
+        ndjson_log_key_event(SURFACE, "setsockopt", "ALG_SET_AEAD_ASSOCLEN",
+          c->name, nullptr, 0, (unsigned char*)&assoc, sizeof(assoc), nullptr, 0);
+      } else if (optname == ALG_SET_AEAD_AUTHSIZE && optval && optlen >= (socklen_t)sizeof(__u32)) {
+        __u32 auth = *(__u32*)optval;
+        ndjson_log_key_event(SURFACE, "setsockopt", "ALG_SET_AEAD_AUTHSIZE",
+          c->name, nullptr, 0, (unsigned char*)&auth, sizeof(auth), nullptr, 0);
       }
     }
     pthread_mutex_unlock(&g_mu);

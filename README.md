@@ -57,6 +57,7 @@ cmake --build build -j
   - `tests/openssl/provider/openssl_provider_ex2_params_test.cpp` : OSSL_PARAM 기반 설정 값
 - **Linux AF_ALG**
   - `tests/af_alg/af_alg_aes_gcm_demo.c` : 소켓 기반 커널 AES skcipher 키 설정
+  - `tests/af_alg/af_alg_hmac_sha256_demo.c` : HMAC-SHA256 hash 키 설정
 - **cryptodev**
   - `tests/cryptodev/ioctl/cryptodev_aes_cbc_demo.c` : `/dev/crypto` ioctl 기반 AES-256-CBC 세션
 - **libsodium**
