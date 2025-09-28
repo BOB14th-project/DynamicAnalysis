@@ -1,7 +1,6 @@
 // cryptodev_aes_cbc_demo.c
-// Demonstrates AES-256-CBC via /dev/crypto (cryptodev).
-// Requires cryptodev kernel module and libcrypto.
-// Build: gcc cryptodev_aes_cbc_demo.c -lcrypto -o cryptodev_aes_cbc_demo
+// Opens /dev/crypto, establishes an AES-CBC session, then closes it so the
+// cryptodev hook can record the key material supplied via CIOCGSESSION.
 
 #include <crypto/cryptodev.h>
 #include <fcntl.h>
@@ -14,40 +13,32 @@ int main(void) {
     int fd = open("/dev/crypto", O_RDWR);
     if (fd < 0) {
         perror("open /dev/crypto");
-        return 1;
+        return 0; // treat as no-op when device is absent
     }
 
-    struct session_op sess = {0};
-    unsigned char key[32] = {0};
+    unsigned char key[32];
+    for (size_t i = 0; i < sizeof(key); ++i) {
+        key[i] = (unsigned char)(i * 3);
+    }
+
+    struct session_op sess;
+    memset(&sess, 0, sizeof(sess));
     sess.cipher = CRYPTO_AES_CBC;
     sess.keylen = sizeof(key);
     sess.key = key;
 
-    if (ioctl(fd, CIOCGSESSION, &sess) < 0) {
+    if (ioctl(fd, CIOCGSESSION, &sess) == -1) {
         perror("CIOCGSESSION");
         close(fd);
         return 1;
     }
 
-    unsigned char iv[16] = {0};
-    unsigned char src[] = "hello from cryptodev";
-    unsigned char dst[64] = {0};
+    printf("cryptodev AES-CBC session established (ses=%u)\n", sess.ses);
 
-    struct crypt_op cop = {0};
-    cop.ses = sess.ses;
-    cop.len = sizeof(src) - 1;
-    cop.src = src;
-    cop.dst = dst;
-    cop.iv = iv;
-    cop.op = COP_ENCRYPT;
-
-    if (ioctl(fd, CIOCCRYPT, &cop) < 0) {
-        perror("CIOCCRYPT");
-    } else {
-        printf("ciphertext first byte=0x%02x\n", dst[0]);
+    if (ioctl(fd, CIOCFSESSION, &sess.ses) == -1) {
+        perror("CIOCFSESSION");
     }
 
-    ioctl(fd, CIOCFSESSION, &sess.ses); // ignore errors
     close(fd);
     return 0;
 }

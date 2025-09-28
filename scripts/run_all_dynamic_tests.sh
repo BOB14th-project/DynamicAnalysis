@@ -32,6 +32,8 @@ OPTIONAL_TESTS+=(
   libsodium_xchacha20_poly1305_demo
   libsodium_secretbox_demo
   libsodium_box_demo
+  af_alg_aes_gcm_demo
+  cryptodev_aes_cbc_demo
 )
 
 STATUS=0

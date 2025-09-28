@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.16)
 project(ldpreload_hook LANGUAGES C CXX)
 
+include(CheckIncludeFile)
+
 # ── 공통 설정
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -127,6 +129,24 @@ if(ENABLE_LIBSODIUM)
     endif()
 endif()
 
+if(ENABLE_AF_ALG)
+    check_include_file("linux/if_alg.h" HAVE_LINUX_IF_ALG_H)
+    if(HAVE_LINUX_IF_ALG_H)
+        add_executable(af_alg_aes_gcm_demo tests/af_alg/af_alg_aes_gcm_demo.c)
+    else()
+        message(WARNING "linux/if_alg.h not found; skipping AF_ALG demo build")
+    endif()
+endif()
+
+if(ENABLE_CRYPTODEV)
+    check_include_file("crypto/cryptodev.h" HAVE_CRYPTODEV_H)
+    if(HAVE_CRYPTODEV_H)
+        add_executable(cryptodev_aes_cbc_demo tests/cryptodev/ioctl/cryptodev_aes_cbc_demo.c)
+    else()
+        message(WARNING "crypto/cryptodev.h not found; skipping cryptodev demo build")
+    endif()
+endif()
+
 # ── 동적 분석 CLI (LD_PRELOAD 주입 자동화)
 add_executable(dynamic_analysis_cli src/main.cpp src/dynamic_analysis.cpp)
 
@@ -159,12 +179,20 @@ if(LIBSODIUM_FOUND)
         libsodium_secretbox_demo
         libsodium_box_demo)
 endif()
+if(ENABLE_AF_ALG AND HAVE_LINUX_IF_ALG_H)
+    list(APPEND TEST_TARGETS af_alg_aes_gcm_demo)
+endif()
+if(ENABLE_CRYPTODEV AND HAVE_CRYPTODEV_H)
+    list(APPEND TEST_TARGETS cryptodev_aes_cbc_demo)
+endif()
 
 foreach(tgt IN LISTS TEST_TARGETS)
   if(NOT tgt STREQUAL "libsodium_chacha20_poly1305_demo" AND
      NOT tgt STREQUAL "libsodium_xchacha20_poly1305_demo" AND
      NOT tgt STREQUAL "libsodium_secretbox_demo" AND
-     NOT tgt STREQUAL "libsodium_box_demo")
+     NOT tgt STREQUAL "libsodium_box_demo" AND
+     NOT tgt STREQUAL "af_alg_aes_gcm_demo" AND
+     NOT tgt STREQUAL "cryptodev_aes_cbc_demo")
     target_precompile_headers(${tgt} PRIVATE ${CMAKE_SOURCE_DIR}/include/pch.h)
   endif()
 endforeach()
