@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.16)
 project(ldpreload_hook LANGUAGES C CXX)
 
 include(CheckIncludeFile)
+include(CheckCXXSourceCompiles)
 
 # ── 공통 설정
 set(CMAKE_CXX_STANDARD 17)
@@ -266,6 +267,26 @@ if(BORINGSSL_INCLUDE_DIR AND BORINGSSL_CRYPTO_LIBRARY)
     add_executable(boringssl_aes_gcm_demo tests/boringSSL/symmetric/boringssl_aes_gcm_demo.cc)
     target_include_directories(boringssl_aes_gcm_demo PRIVATE ${BORINGSSL_INCLUDE_DIR})
     target_link_libraries(boringssl_aes_gcm_demo PRIVATE ${BORINGSSL_CRYPTO_LIBRARY})
+
+    add_executable(boringssl_aes_gcm_roundtrip_demo tests/boringSSL/symmetric/boringssl_aes_gcm_roundtrip_demo.cc)
+    target_include_directories(boringssl_aes_gcm_roundtrip_demo PRIVATE ${BORINGSSL_INCLUDE_DIR})
+    target_link_libraries(boringssl_aes_gcm_roundtrip_demo PRIVATE ${BORINGSSL_CRYPTO_LIBRARY})
+
+    add_executable(boringssl_chacha20_poly1305_demo tests/boringSSL/symmetric/boringssl_chacha20_poly1305_demo.cc)
+    target_include_directories(boringssl_chacha20_poly1305_demo PRIVATE ${BORINGSSL_INCLUDE_DIR})
+    target_link_libraries(boringssl_chacha20_poly1305_demo PRIVATE ${BORINGSSL_CRYPTO_LIBRARY})
+
+    set(CMAKE_REQUIRED_INCLUDES ${BORINGSSL_INCLUDE_DIR})
+    check_cxx_source_compiles(
+        "#include <openssl/aead.h>\nint main() {\n#ifdef EVP_aead_xchacha20_poly1305\n    (void)EVP_aead_xchacha20_poly1305();\n    return 0;\n#else\n    return 1;\n#endif\n}"
+        BORINGSSL_HAS_XCHACHA)
+    unset(CMAKE_REQUIRED_INCLUDES)
+
+    if(BORINGSSL_HAS_XCHACHA)
+        add_executable(boringssl_xchacha20_poly1305_demo tests/boringSSL/symmetric/boringssl_xchacha20_poly1305_demo.cc)
+        target_include_directories(boringssl_xchacha20_poly1305_demo PRIVATE ${BORINGSSL_INCLUDE_DIR})
+        target_link_libraries(boringssl_xchacha20_poly1305_demo PRIVATE ${BORINGSSL_CRYPTO_LIBRARY})
+    endif()
 else()
     message(WARNING "BoringSSL headers or library not found; skipping BoringSSL demo build")
 endif()
@@ -349,7 +370,13 @@ if(MBEDTLS_FOUND)
     endif()
 endif()
 if(BORINGSSL_FOUND)
-    list(APPEND TEST_TARGETS boringssl_aes_gcm_demo)
+    list(APPEND TEST_TARGETS
+        boringssl_aes_gcm_demo
+        boringssl_aes_gcm_roundtrip_demo
+        boringssl_chacha20_poly1305_demo)
+    if(BORINGSSL_HAS_XCHACHA)
+        list(APPEND TEST_TARGETS boringssl_xchacha20_poly1305_demo)
+    endif()
 endif()
 if(ENABLE_AF_ALG AND HAVE_LINUX_IF_ALG_H)
     list(APPEND TEST_TARGETS

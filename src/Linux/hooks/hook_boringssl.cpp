@@ -59,8 +59,19 @@ size_t clamp_len(size_t len) {
 using fn_EVP_AEAD_max_overhead = size_t (*)(const EVP_AEAD*);
 static fn_EVP_AEAD_max_overhead real_EVP_AEAD_max_overhead = nullptr;
 
-using fn_EVP_AEAD_name = const char* (*)(const EVP_AEAD*);
-static fn_EVP_AEAD_name real_EVP_AEAD_name = nullptr;
+const char* describe_aead(const EVP_AEAD* aead) {
+    if (!aead) {
+        return "AEAD";
+    }
+
+    if (aead == EVP_aead_aes_256_gcm()) return "AES-256-GCM";
+    if (aead == EVP_aead_aes_128_gcm()) return "AES-128-GCM";
+    if (aead == EVP_aead_chacha20_poly1305()) return "CHACHA20-POLY1305";
+#if defined(EVP_aead_xchacha20_poly1305)
+    if (aead == EVP_aead_xchacha20_poly1305()) return "XCHACHA20-POLY1305";
+#endif
+    return "AEAD";
+}
 
 void remember_state(const EVP_AEAD_CTX* ctx,
                     const EVP_AEAD* aead,
@@ -83,13 +94,7 @@ void remember_state(const EVP_AEAD_CTX* ctx,
         }
     }
 
-    std::string name = "AEAD";
-    RESOLVE_SYM(real_EVP_AEAD_name, "EVP_AEAD_name");
-    if (real_EVP_AEAD_name) {
-        if (const char* aead_name = real_EVP_AEAD_name(aead)) {
-            name = aead_name;
-        }
-    }
+    std::string name = describe_aead(aead);
 
     std::lock_guard<std::mutex> lock(g_state_mu);
     auto& state = g_states[ctx];

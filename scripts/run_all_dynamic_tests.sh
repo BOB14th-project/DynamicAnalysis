@@ -44,6 +44,9 @@ OPTIONAL_TESTS+=(
   mbedtls_ecdsa_demo
   mbedtls_rsa_demo
   boringssl_aes_gcm_demo
+  boringssl_aes_gcm_roundtrip_demo
+  boringssl_chacha20_poly1305_demo
+  boringssl_xchacha20_poly1305_demo
   af_alg_skcipher_aes_cbc_demo
   af_alg_aes_gcm_demo
   af_alg_hmac_sha256_demo

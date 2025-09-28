@@ -109,7 +109,11 @@ sudo apt-get install -y \
 - **NSS**
   - `tests/NSS/symmetric/nss_aes_gcm_demo.c` : `PK11_Encrypt` AES-256-GCM
 - **boringSSL**
-  - `tests/boringSSL/symmetric/boringssl_aes_gcm_demo.cc` : `EVP_AEAD_CTX_seal` AES-256-GCM
+  - `tests/boringSSL/symmetric/boringssl_aes_gcm_demo.cc` : AES-256-GCM 단방향 암호화
+  - `tests/boringSSL/symmetric/boringssl_aes_gcm_roundtrip_demo.cc` : AES-256-GCM 암·복호화
+  - `tests/boringSSL/symmetric/boringssl_chacha20_poly1305_demo.cc` : ChaCha20-Poly1305 암호화
+  - `tests/boringSSL/symmetric/boringssl_xchacha20_poly1305_demo.cc` : XChaCha20-Poly1305 암호화
+    - (BoringSSL 빌드에서 XChaCha20이 비활성화된 경우 해당 데모는 "not enabled" 메시지만 출력하고 종료)
 - **mbedTLS**
   - `tests/mbedTLS/symmetric/mbedtls_aes_gcm_demo.c` : `mbedtls_gcm_crypt_and_tag`
 - **wolfSSL**
