@@ -68,6 +68,7 @@ cmake --build build -j
   - `tests/libsodium/aead/xchacha20_poly1305_demo.c` : `crypto_aead_xchacha20poly1305_ietf_*`
   - `tests/libsodium/secretbox/libsodium_secretbox_demo.c` : `crypto_secretbox_*`
   - `tests/libsodium/box/libsodium_box_demo.c` : `crypto_box_*`
+  - `tests/libsodium/sign/libsodium_sign_demo.c` : `crypto_sign_*`
 - **GnuTLS**
   - `tests/GnuTLS/symmetric/gnutls_aes_gcm_demo.c` : `gnutls_cipher_*` AES-256-GCM 호출
 - **NSS**

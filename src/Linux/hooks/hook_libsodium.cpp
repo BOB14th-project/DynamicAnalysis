@@ -17,6 +17,25 @@ struct AEADConfig {
 
 constexpr AEADConfig kChacha20Poly1305Ietf{ "chacha20poly1305-ietf", 32, 12, 16 };
 constexpr AEADConfig kXChacha20Poly1305Ietf{ "xchacha20poly1305-ietf", 32, 24, 16 };
+constexpr size_t kSignSecretKeyLen = 64; // ed25519 secret key length
+
+void log_sign_event(const char* api,
+                    const unsigned char* sk,
+                    size_t sk_len,
+                    const unsigned char* sig,
+                    size_t sig_len) {
+    ndjson_log_key_event(
+        SURFACE,
+        api,
+        "sign",
+        "sign-ed25519",
+        sk_len ? sk : nullptr,
+        static_cast<int>(sk_len),
+        nullptr,
+        0,
+        sig_len ? sig : nullptr,
+        static_cast<int>(sig_len));
+}
 constexpr AEADConfig kSecretboxEasy{ "secretbox-easy", 32, 24, 16 };
 constexpr AEADConfig kBoxEasy{ "box-easy", 32, 24, 16 };
 
@@ -205,6 +224,58 @@ DEFINE_AEAD_DETACHED_HOOK(crypto_aead_chacha20poly1305_ietf, kChacha20Poly1305Ie
 
 DEFINE_AEAD_ATTACHED_HOOK(crypto_aead_xchacha20poly1305_ietf, kXChacha20Poly1305Ietf)
 DEFINE_AEAD_DETACHED_HOOK(crypto_aead_xchacha20poly1305_ietf, kXChacha20Poly1305Ietf)
+
+using fn_crypto_sign_detached = int (*)(unsigned char*, unsigned long long*, const unsigned char*, unsigned long long, const unsigned char*);
+static fn_crypto_sign_detached real_crypto_sign_detached = nullptr;
+
+extern "C" int crypto_sign_detached(unsigned char* sig,
+                                     unsigned long long* siglen_p,
+                                     const unsigned char* m,
+                                     unsigned long long mlen,
+                                     const unsigned char* sk) {
+    RESOLVE_SYM(real_crypto_sign_detached, "crypto_sign_detached");
+    if (!real_crypto_sign_detached) return -1;
+    ReentryGuard guard;
+    if (!guard) {
+        return real_crypto_sign_detached(sig, siglen_p, m, mlen, sk);
+    }
+    int ret = real_crypto_sign_detached(sig, siglen_p, m, mlen, sk);
+    if (ret == 0 && sk) {
+        unsigned long long siglen = siglen_p ? *siglen_p : 0ULL;
+        log_sign_event("crypto_sign_detached",
+                       sk,
+                       kSignSecretKeyLen,
+                       sig,
+                       static_cast<size_t>(siglen));
+    }
+    return ret;
+}
+
+using fn_crypto_sign_ed25519_detached = int (*)(unsigned char*, unsigned long long*, const unsigned char*, unsigned long long, const unsigned char*);
+static fn_crypto_sign_ed25519_detached real_crypto_sign_ed25519_detached = nullptr;
+
+extern "C" int crypto_sign_ed25519_detached(unsigned char* sig,
+                                             unsigned long long* siglen_p,
+                                             const unsigned char* m,
+                                             unsigned long long mlen,
+                                             const unsigned char* sk) {
+    RESOLVE_SYM(real_crypto_sign_ed25519_detached, "crypto_sign_ed25519_detached");
+    if (!real_crypto_sign_ed25519_detached) return -1;
+    ReentryGuard guard;
+    if (!guard) {
+        return real_crypto_sign_ed25519_detached(sig, siglen_p, m, mlen, sk);
+    }
+    int ret = real_crypto_sign_ed25519_detached(sig, siglen_p, m, mlen, sk);
+    if (ret == 0 && sk) {
+        unsigned long long siglen = siglen_p ? *siglen_p : 0ULL;
+        log_sign_event("crypto_sign_ed25519_detached",
+                       sk,
+                       kSignSecretKeyLen,
+                       sig,
+                       static_cast<size_t>(siglen));
+    }
+    return ret;
+}
 
 using fn_crypto_secretbox_easy = int (*)(unsigned char*, const unsigned char*, unsigned long long, const unsigned char*, const unsigned char*);
 using fn_crypto_secretbox_open_easy = int (*)(unsigned char*, const unsigned char*, unsigned long long, const unsigned char*, const unsigned char*);

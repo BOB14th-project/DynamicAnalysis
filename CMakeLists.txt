@@ -124,6 +124,10 @@ if(ENABLE_LIBSODIUM)
         add_executable(libsodium_box_demo tests/libsodium/box/libsodium_box_demo.c)
         target_include_directories(libsodium_box_demo PRIVATE ${LIBSODIUM_INCLUDE_DIR})
         target_link_libraries(libsodium_box_demo PRIVATE ${LIBSODIUM_LIBRARY})
+
+        add_executable(libsodium_sign_demo tests/libsodium/sign/libsodium_sign_demo.c)
+        target_include_directories(libsodium_sign_demo PRIVATE ${LIBSODIUM_INCLUDE_DIR})
+        target_link_libraries(libsodium_sign_demo PRIVATE ${LIBSODIUM_LIBRARY})
     else()
         message(WARNING "libsodium headers or library not found; skipping libsodium demo build")
     endif()
@@ -181,7 +185,8 @@ if(LIBSODIUM_FOUND)
         libsodium_chacha20_poly1305_demo
         libsodium_xchacha20_poly1305_demo
         libsodium_secretbox_demo
-        libsodium_box_demo)
+        libsodium_box_demo
+        libsodium_sign_demo)
 endif()
 if(ENABLE_AF_ALG AND HAVE_LINUX_IF_ALG_H)
     list(APPEND TEST_TARGETS
@@ -201,6 +206,7 @@ foreach(tgt IN LISTS TEST_TARGETS)
      NOT tgt STREQUAL "libsodium_xchacha20_poly1305_demo" AND
      NOT tgt STREQUAL "libsodium_secretbox_demo" AND
      NOT tgt STREQUAL "libsodium_box_demo" AND
+     NOT tgt STREQUAL "libsodium_sign_demo" AND
      NOT tgt STREQUAL "af_alg_skcipher_aes_cbc_demo" AND
      NOT tgt STREQUAL "af_alg_aes_gcm_demo" AND
      NOT tgt STREQUAL "af_alg_hmac_sha256_demo" AND
