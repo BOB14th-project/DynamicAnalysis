@@ -296,6 +296,9 @@ if(ENABLE_AF_ALG)
 endif()
 
 if(ENABLE_CRYPTODEV)
+    # Add local include directory for cryptodev.h
+    include_directories(${CMAKE_SOURCE_DIR}/include)
+    set(CMAKE_REQUIRED_INCLUDES ${CMAKE_SOURCE_DIR}/include)
     check_include_file("crypto/cryptodev.h" HAVE_CRYPTODEV_H)
     if(HAVE_CRYPTODEV_H)
         add_executable(cryptodev_aes_cbc_demo tests/cryptodev/ioctl/cryptodev_aes_cbc_demo.c)

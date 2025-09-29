@@ -9,6 +9,11 @@
 #include <sys/ioctl.h>
 #include <unistd.h>
 
+// Define caddr_t if not available
+#ifndef caddr_t
+typedef char * caddr_t;
+#endif
+
 int main(void) {
     int fd = open("/dev/crypto", O_RDWR);
     if (fd < 0) {
@@ -25,11 +30,11 @@ int main(void) {
     memset(&kop, 0, sizeof(kop));
     kop.crk_op = CRK_MOD_EXP;
     kop.crk_iparams = 3;
-    kop.crk_param[0].crp_p = reinterpret_cast<caddr_t>(base);
+    kop.crk_param[0].crp_p = (caddr_t)base;
     kop.crk_param[0].crp_nbits = sizeof(base) * 8;
-    kop.crk_param[1].crp_p = reinterpret_cast<caddr_t>(exponent);
+    kop.crk_param[1].crp_p = (caddr_t)exponent;
     kop.crk_param[1].crp_nbits = sizeof(exponent) * 8;
-    kop.crk_param[2].crp_p = reinterpret_cast<caddr_t>(modulus);
+    kop.crk_param[2].crp_p = (caddr_t)modulus;
     kop.crk_param[2].crp_nbits = sizeof(modulus) * 8;
 
     if (ioctl(fd, CIOCKEY, &kop) == -1) {
@@ -66,11 +71,11 @@ int main(void) {
     kop_sign.crk_oparams = 1;
 
     // Set up parameters: digest, modulus, private exponent
-    kop_sign.crk_param[0].crp_p = reinterpret_cast<caddr_t>(message_digest);
+    kop_sign.crk_param[0].crp_p = (caddr_t)message_digest;
     kop_sign.crk_param[0].crp_nbits = sizeof(message_digest) * 8;
-    kop_sign.crk_param[1].crp_p = reinterpret_cast<caddr_t>(rsa_n);
+    kop_sign.crk_param[1].crp_p = (caddr_t)rsa_n;
     kop_sign.crk_param[1].crp_nbits = sizeof(rsa_n) * 8;
-    kop_sign.crk_param[2].crp_p = reinterpret_cast<caddr_t>(rsa_d);
+    kop_sign.crk_param[2].crp_p = (caddr_t)rsa_d;
     kop_sign.crk_param[2].crp_nbits = sizeof(rsa_d) * 8;
 
     if (ioctl(fd, CIOCKEY, &kop_sign) == -1) {
