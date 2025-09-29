@@ -1,30 +1,46 @@
 # 암호 라이브러리 동적 분석 도구
 
-OpenSSL · Linux 커널 AF_ALG · JNI 기반 Java 등 다양한 암호화 실행 경로를 훅킹해 실시간으로 키/IV/태그 정보를 수집하는 분석 도구입니다. 플랫폼별 주입 방식은 다음과 같습니다.
+OpenSSL · Linux 커널 AF_ALG · JNI 기반 Java 등 다양한 암호화 실행 경로를 훅킹해 실시간으로 키/IV/태그 정보를 수집하는 크로스 플랫폼 분석 도구입니다. 플랫폼별 주입 방식은 다음과 같습니다.
 
 - **Linux**: `LD_PRELOAD`로 `libhook.so`를 선주입해 암호 API를 가로채고 NDJSON 로그를 생성합니다.
-- **Windows (구현 예정)**: DLL 인젝션 기반 주입 방식으로 동일한 이벤트 스트림을 수집할 예정입니다.
+- **Windows**: Microsoft Detours를 사용한 DLL 인젝션으로 OpenSSL API를 후킹하여 동일한 이벤트 스트림을 수집합니다.
 
 `dynamic_analysis_cli`는 대상 프로그램을 자동으로 주입 실행한 뒤 수집된 이벤트를 표준 출력과 로그 파일 모두에 기록합니다.
 
 ---
 
 ## 구성 요소
-- `libhook.so` : 메인 훅킹 라이브러리. OpenSSL EVP/Provider/ECC, AF_ALG, JNI 경로를 감지해 로그를 남깁니다.
-- `dynamic_analysis_cli` : `dynamic_analysis(<dir>, <binary>)`를 호출하는 CLI. Linux에서 대상 실행 파일을 포크/exec로 실행하고 `LD_PRELOAD`/`HOOK_VERBOSE`/`HOOK_NDJSON` 환경을 자동 설정합니다.
+- **Linux**: `libhook.so` - LD_PRELOAD 기반 훅킹 라이브러리. OpenSSL EVP/Provider/ECC, AF_ALG, JNI 경로를 감지해 로그를 남깁니다.
+- **Windows**: `hook.dll` - Detours 기반 훅킹 라이브러리. 현재 OpenSSL EVP API 후킹을 지원합니다.
+- `dynamic_analysis_cli` : 크로스 플랫폼 CLI 도구
+  - **Linux**: 대상 실행 파일을 포크/exec로 실행하고 `LD_PRELOAD` 환경을 자동 설정
+  - **Windows**: `DetourCreateProcessWithDll()`로 프로세스 생성과 동시에 DLL 주입
 - `logs/*.ndjson` : 분석 결과가 쌓이는 NDJSON 라인 로그. 각 이벤트는 `ts/pid/tid/api/cipher/key/...` 필드를 포함합니다.
-- `tests/` : 지원되는 모든 훅 경로를 다루는 샘플 프로그램 모음 (OpenSSL CBC/GCM/ECC/Provider, AF_ALG, JNI 등).
+- `tests/openssl/` : 크로스 플랫폼 OpenSSL 테스트 코드 (AES CBC/GCM, ECC, Provider API 등)
 
 ---
 
 ## 빌드
+
+### Linux
 ```bash
 cmake -S . -B build
 cmake --build build -j
 ```
 
-- 주요 산출물: `build/lib/libhook.so`, `build/bin/dynamic_analysis_cli`, `build/bin/*` 테스트 실행 파일들
-- 기본적으로 OpenSSL 1.1/3.0 모두 지원하며, JNI가 감지되면 Java 관련 훅도 자동 활성화됩니다.
+### Windows
+```cmd
+# Detours 라이브러리가 필요합니다
+cmake -S . -B build -DCMAKE_PREFIX_PATH="C:/dev/detours"
+cmake --build build
+```
+
+**주요 산출물:**
+- **Linux**: `build/lib/libhook.so`, `build/bin/dynamic_analysis_cli`
+- **Windows**: `build/lib/hook.dll`, `build/bin/dynamic_analysis_cli.exe`
+- **공통**: `build/bin/*` OpenSSL 테스트 실행 파일들
+
+기본적으로 OpenSSL 1.1/3.0 모두 지원하며, Linux에서는 JNI가 감지되면 Java 관련 훅도 자동 활성화됩니다.
 
 ---
 
@@ -32,7 +48,13 @@ cmake --build build -j
 
 ### 0. 의존 라이브러리 설치
 
-아래 명령을 한 번에 실행하면 OpenSSL, libsodium, GnuTLS, NSS, mbedTLS까지 필요한 개발 헤더가 설치됩니다(Ubuntu 24.04 기준).
+#### Linux (Ubuntu 24.04 기준)
+아래 명령을 한 번에 실행하면 OpenSSL, libsodium, GnuTLS, NSS, mbedTLS까지 필요한 개발 헤더가 설치됩니다.
+
+#### Windows
+- **필수**: [Microsoft Detours](https://github.com/microsoft/Detours) 라이브러리
+- **필수**: OpenSSL for Windows (vcpkg 또는 직접 빌드)
+- **선택**: Visual Studio 2019/2022 또는 MinGW
 
 ```bash
 sudo apt-get update
@@ -61,22 +83,32 @@ sudo apt-get install -y \
 
 ※ WSL2 기본 커널은 모듈 로드를 지원하지 않으므로 cryptodev 샘플은 자동 건너뛰기 됩니다. 특정 패키지가 누락되면 해당 샘플만 빌드/실행이 생략되고 나머지 경로는 정상 동작합니다.
 
-1. 로그 파일 경로 지정 (선택)
-   ```bash
-   export HOOK_NDJSON="$PWD/logs/analysis.ndjson"
-   ```
-2. 동적 분석 실행 (예: OpenSSL AES CBC 테스트)
-   ```bash
-   ./build/bin/dynamic_analysis_cli ./build/bin/openssl_aes_lib_test
-   ```
-   모든 샘플을 한 번에 돌려보고 싶다면 다음 스크립트를 사용할 수 있습니다.
-   ```bash
-   ./scripts/run_all_dynamic_tests.sh
-   ```
-3. 결과 확인
-   ```bash
-   cat logs/analysis.ndjson
-   ```
+### 1. 동적 분석 실행
+
+#### Linux
+```bash
+# 로그 파일 경로 지정 (선택)
+export HOOK_NDJSON="$PWD/logs/analysis.ndjson"
+
+# OpenSSL AES CBC 테스트 실행
+./build/bin/dynamic_analysis_cli ./build/bin/openssl_aes_lib_test
+```
+
+#### Windows
+```cmd
+# OpenSSL AES CBC 테스트 실행 (관리자 권한 필요시)
+.\build\bin\dynamic_analysis_cli.exe .\build\bin\openssl_aes_lib_test.exe
+```
+#### 모든 테스트 실행 (Linux만)
+```bash
+./scripts/run_all_dynamic_tests.sh
+```
+
+### 2. 결과 확인
+```bash
+# Linux/Windows 공통
+cat logs/analysis.ndjson
+```
 
 동적 분석 CLI는 실행 종료 후 `captured events:` 블록에 기록된 NDJSON 라인을 표준 출력으로 보여 줍니다.
 
@@ -151,11 +183,21 @@ sudo apt-get install -y \
 ---
 
 ## 참고 사항
-- 정적 링크 또는 setuid 바이너리에는 LD_PRELOAD가 적용되지 않습니다.
+
+### 공통
 - Pure Java(SunJCE 등) 경로는 키를 잡을 수 없으며, JNI를 통해 OpenSSL을 사용할 때만 후킹됩니다.
+- 필요 시 `HOOK_VERBOSE=1`로 설정하면 stderr에 디버그 로그가 함께 출력됩니다.
+- 분석 과정에서 기존 `HOOK_NDJSON` 값이 있었다면 CLI가 일시적으로 덮어쓰고 나중에 복구합니다.
+
+### Linux 전용
+- 정적 링크 또는 setuid 바이너리에는 LD_PRELOAD가 적용되지 않습니다.
 - AF_ALG 샘플은 루트 실행이거나 `setcap cap_net_admin,cap_sys_admin+ep` 등 소켓 권한이 필요합니다.
 - cryptodev 샘플은 `/dev/cryptodev` 장치가 있는 환경(예: 모듈 로드 가능한 VM/베어메탈)에서만 실행됩니다.
 - BoringSSL 샘플은 별도 소스 빌드가 필요하며, `BUILD_SHARED_LIBS=ON`으로 공유 라이브러리를 만든 뒤 `BORINGSSL_ROOT`를 지정해야 LD_PRELOAD 후킹이 동작합니다.
-- OpenSSL 이외의 샘플들은 기본 빌드에 포함되지 않습니다. 필요 시 각 라이브러리를 설치한 뒤 개별 명령으로 빌드하여 `dynamic_analysis_cli`와 함께 사용하세요.
-- 필요 시 `HOOK_VERBOSE=1`로 설정하면 stderr에 디버그 로그가 함께 출력됩니다.
-- 분석 과정에서 기존 `HOOK_NDJSON` 값이 있었다면 CLI가 일시적으로 덮어쓰고 나중에 복구합니다.
+- OpenSSL 이외의 샘플들(libsodium, GnuTLS, NSS 등)은 기본 빌드에 포함되지 않습니다.
+
+### Windows 전용
+- **현재 OpenSSL만 지원**: libsodium, GnuTLS 등 다른 라이브러리는 아직 구현되지 않았습니다.
+- **관리자 권한**: DLL 인젝션 시 관리자 권한이 필요할 수 있습니다.
+- **Detours 의존성**: Microsoft Detours 라이브러리가 반드시 필요합니다.
+- **동적 링크 필요**: 정적 링크된 OpenSSL을 사용하는 프로그램은 후킹되지 않습니다.
