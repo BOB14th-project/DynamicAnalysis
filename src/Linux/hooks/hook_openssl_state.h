@@ -1,9 +1,8 @@
 #pragma once
 
+#include <openssl/evp.h>
 #include <vector>
 #include <string>
-
-struct EVP_CIPHER_CTX;
 
 struct OpenSSLState {
     std::vector<unsigned char> key;

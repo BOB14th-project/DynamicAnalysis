@@ -10,6 +10,25 @@
 #include <string.h>
 #include <pthread.h>
 
+// Extended AF_ALG constants for akcipher/kpp (if not available in kernel headers)
+#ifndef ALG_SET_PUBKEY
+#define ALG_SET_PUBKEY			6
+#endif
+#ifndef ALG_SET_PUBKEY_ID
+#define ALG_SET_PUBKEY_ID		7
+#endif
+#ifndef ALG_SET_KEY_ID
+#define ALG_SET_KEY_ID			8
+#endif
+
+// Extended operations for asymmetric crypto
+#ifndef ALG_OP_SIGN
+#define ALG_OP_SIGN			2
+#endif
+#ifndef ALG_OP_VERIFY
+#define ALG_OP_VERIFY			3
+#endif
+
 #define RESOLVE_SYM(var, name) do{ if(!(var)) (var)=(decltype(var))resolve_next_symbol(name);}while(0)
 static constexpr const char* SURFACE = "af_alg";
 
@@ -23,16 +42,68 @@ static int (*real_close)(int);
 
 struct fd_ctx {
   bool is_afalg=false, is_op=false;
-  char type[16]{0};   // "skcipher"/"aead"/"hash"
-  char name[64]{0};   // "gcm(aes)" 등
+  char type[16]{0};   // "skcipher"/"aead"/"hash"/"akcipher"/"kpp"
+  char name[64]{0};   // "gcm(aes)"/"rsa"/"ecdh" 등
   unsigned char key[512]; int keylen=0;
   unsigned char iv[64];   int ivlen=0;
-  int op_dir=0; // ALG_OP_ENCRYPT=1, DECRYPT=2
+  unsigned char pubkey[2048]; int pubkeylen=0;  // Public key for akcipher
+  int op_dir=0; // ALG_OP_ENCRYPT=1, DECRYPT=2, SIGN=2, VERIFY=3
+  int key_id=0; // For ALG_SET_KEY_ID/ALG_SET_PUBKEY_ID
 };
 static fd_ctx g_ctx[65536];
 static pthread_mutex_t g_mu = PTHREAD_MUTEX_INITIALIZER;
 
 static inline fd_ctx* get(int fd){ return (fd>=0 && fd<(int)(sizeof(g_ctx)/sizeof(g_ctx[0]))) ? &g_ctx[fd] : nullptr; }
+
+// Helper function to identify key type from binary data
+static const char* identify_key_type(const unsigned char* data, int len) {
+  if (!data || len < 10) return "unknown";
+
+  // Check for DER format (starts with 0x30 - SEQUENCE)
+  if (data[0] == 0x30) {
+    // Look for RSA OID: 1.2.840.113549.1.1.1
+    // In DER: 06 09 2A 86 48 86 F7 0D 01 01 01
+    for (int i = 0; i < len - 11; i++) {
+      if (data[i] == 0x06 && data[i+1] == 0x09 &&
+          data[i+2] == 0x2A && data[i+3] == 0x86 && data[i+4] == 0x48 &&
+          data[i+5] == 0x86 && data[i+6] == 0xF7 && data[i+7] == 0x0D &&
+          data[i+8] == 0x01 && data[i+9] == 0x01 && data[i+10] == 0x01) {
+        return "RSA-DER";
+      }
+    }
+
+    // Look for EC OID: 1.2.840.10045.2.1
+    // In DER: 06 07 2A 86 48 CE 3D 02 01
+    for (int i = 0; i < len - 9; i++) {
+      if (data[i] == 0x06 && data[i+1] == 0x07 &&
+          data[i+2] == 0x2A && data[i+3] == 0x86 && data[i+4] == 0x48 &&
+          data[i+5] == 0xCE && data[i+6] == 0x3D && data[i+7] == 0x02 && data[i+8] == 0x01) {
+        return "ECC-DER";
+      }
+    }
+
+    return "DER-format";
+  }
+
+  // Check for PEM format (starts with "-----BEGIN")
+  if (len >= 10 && memcmp(data, "-----BEGIN", 10) == 0) {
+    if (len >= 27 && memcmp(data, "-----BEGIN RSA PUBLIC KEY", 26) == 0) {
+      return "RSA-PEM";
+    } else if (len >= 26 && memcmp(data, "-----BEGIN PUBLIC KEY", 21) == 0) {
+      return "PUBLIC-KEY-PEM";
+    } else if (len >= 32 && memcmp(data, "-----BEGIN EC PRIVATE KEY", 25) == 0) {
+      return "ECC-PRIVATE-PEM";
+    }
+    return "PEM-format";
+  }
+
+  // Raw key material (could be raw RSA modulus or EC point)
+  if (len >= 64 && len <= 1024) {
+    return "raw-key";
+  }
+
+  return "unknown";
+}
 
 extern "C" int socket(int domain, int type, int protocol){
   RESOLVE_SYM(real_socket, "socket");
@@ -89,7 +160,14 @@ extern "C" int setsockopt(int fd, int level, int optname, const void* optval, so
           c->key, c->keylen, nullptr, 0, nullptr, 0);
       } else if (optname == ALG_SET_OP && optval && optlen >= (socklen_t)sizeof(int)) {
         c->op_dir = *(const int*)optval;
-        ndjson_log_key_event(SURFACE, "setsockopt", c->op_dir == ALG_OP_ENCRYPT ? "ALG_SET_OP_ENCRYPT" : "ALG_SET_OP_DECRYPT",
+        const char* op_name = "ALG_SET_OP_UNKNOWN";
+        switch (c->op_dir) {
+          case ALG_OP_ENCRYPT: op_name = "ALG_SET_OP_ENCRYPT"; break;
+          case ALG_OP_DECRYPT: op_name = "ALG_SET_OP_DECRYPT"; break;
+          case ALG_OP_SIGN: op_name = "ALG_SET_OP_SIGN"; break;
+          case ALG_OP_VERIFY: op_name = "ALG_SET_OP_VERIFY"; break;
+        }
+        ndjson_log_key_event(SURFACE, "setsockopt", op_name,
           c->name, nullptr, 0, nullptr, 0, nullptr, 0);
       } else if (optname == ALG_SET_AEAD_ASSOCLEN && optval && optlen >= (socklen_t)sizeof(__u32)) {
         __u32 assoc = *(__u32*)optval;
@@ -99,6 +177,28 @@ extern "C" int setsockopt(int fd, int level, int optname, const void* optval, so
         __u32 auth = *(__u32*)optval;
         ndjson_log_key_event(SURFACE, "setsockopt", "ALG_SET_AEAD_AUTHSIZE",
           c->name, nullptr, 0, (unsigned char*)&auth, sizeof(auth), nullptr, 0);
+      } else if (optname == ALG_SET_PUBKEY && optval && optlen > 0) {
+        // Handle public key setting for akcipher
+        c->pubkeylen = optlen > (socklen_t)sizeof(c->pubkey) ? (int)sizeof(c->pubkey) : (int)optlen;
+        memcpy(c->pubkey, optval, c->pubkeylen);
+
+        // Identify key type and create enhanced cipher name
+        const char* key_type = identify_key_type(c->pubkey, c->pubkeylen);
+        char enhanced_name[128];
+        snprintf(enhanced_name, sizeof(enhanced_name), "%s(%s)", c->name, key_type);
+
+        ndjson_log_key_event(SURFACE, "setsockopt", "ALG_SET_PUBKEY", enhanced_name,
+          c->pubkey, c->pubkeylen, nullptr, 0, nullptr, 0);
+      } else if (optname == ALG_SET_KEY_ID && optval && optlen >= (socklen_t)sizeof(int)) {
+        // Handle key ID from kernel keyring
+        c->key_id = *(const int*)optval;
+        ndjson_log_key_event(SURFACE, "setsockopt", "ALG_SET_KEY_ID", c->name,
+          (unsigned char*)&c->key_id, sizeof(c->key_id), nullptr, 0, nullptr, 0);
+      } else if (optname == ALG_SET_PUBKEY_ID && optval && optlen >= (socklen_t)sizeof(int)) {
+        // Handle public key ID from kernel keyring
+        c->key_id = *(const int*)optval;
+        ndjson_log_key_event(SURFACE, "setsockopt", "ALG_SET_PUBKEY_ID", c->name,
+          (unsigned char*)&c->key_id, sizeof(c->key_id), nullptr, 0, nullptr, 0);
       }
     }
     pthread_mutex_unlock(&g_mu);
@@ -135,7 +235,7 @@ extern "C" ssize_t sendmsg(int fd, const struct msghdr* msg, int flags){
   RESOLVE_SYM(real_sendmsg, "sendmsg");
   if (!real_sendmsg) return -1;
 
-  // cmsg에서 ALG_SET_IV 추출
+  // cmsg에서 ALG_SET_IV 및 akcipher 데이터 추출
   if (msg) {
     pthread_mutex_lock(&g_mu);
     auto c = get(fd);
@@ -151,6 +251,22 @@ extern "C" ssize_t sendmsg(int fd, const struct msghdr* msg, int flags){
           ndjson_log_key_event(SURFACE, "sendmsg", "ALG_SET_IV", c->name,
             nullptr, 0, c->iv, c->ivlen, nullptr, 0);
         }
+      }
+
+      // Log sendmsg data for akcipher/kpp operations (sign/verify data)
+      if ((strcmp(c->type, "akcipher") == 0 || strcmp(c->type, "kpp") == 0) && msg->msg_iov && msg->msg_iovlen > 0) {
+        const char* op_type = "data";
+        if (c->op_dir == ALG_OP_SIGN) op_type = "sign_data";
+        else if (c->op_dir == ALG_OP_VERIFY) op_type = "verify_data";
+        else if (c->op_dir == ALG_OP_ENCRYPT) op_type = "encrypt_data";
+        else if (c->op_dir == ALG_OP_DECRYPT) op_type = "decrypt_data";
+
+        // Log the first iovec buffer (limited size for NDJSON)
+        size_t data_len = msg->msg_iov[0].iov_len > 256 ? 256 : msg->msg_iov[0].iov_len;
+        ndjson_log_key_event(SURFACE, "sendmsg", op_type, c->name,
+          c->pubkeylen > 0 ? c->pubkey : (c->keylen > 0 ? c->key : nullptr),
+          c->pubkeylen > 0 ? c->pubkeylen : c->keylen,
+          (unsigned char*)msg->msg_iov[0].iov_base, (int)data_len, nullptr, 0);
       }
     }
   }

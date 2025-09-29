@@ -3,6 +3,7 @@
 #include "output.h"
 #include "resolver.h"
 #include "reentry_guard.h"
+#include "hook_openssl_state.h"
 
 #include <openssl/evp.h>
 #include <openssl/params.h>
@@ -54,32 +55,67 @@ static fn_setp real_EVP_CIPHER_CTX_set_params = nullptr;
 static fn_getp real_EVP_CIPHER_CTX_get_params = nullptr;
 
 // ---- params 로깅 ----
-static inline void log_params_as_keyevent(const char* api,
-                                          const EVP_CIPHER* type,
-                                          const OSSL_PARAM* p) {
-  if (!p) return;
+static inline void log_params_and_update(const char* api,
+                                         EVP_CIPHER_CTX* ctx,
+                                         const EVP_CIPHER* type,
+                                         const OSSL_PARAM* params) {
+  if (!params) return;
 
-  const char* cname = cipher_name(type);
-  size_t keylen = 0;
-  const void* ivp = nullptr;   size_t ivsz  = 0;
-  const void* tagp = nullptr;  size_t tagsz = 0;
+  const EVP_CIPHER* cipher = type ? type : cipher_from_ctx(ctx);
+  const char* cname = cipher_name(cipher);
 
-  for (const OSSL_PARAM* q = p; q && q->key; ++q) {
-    const char* k = q->key; if (!k) break;
+  size_t keylen_hint = 0;
+  size_t ivlen_hint = 0;
+  size_t taglen_hint = 0;
+  std::vector<unsigned char> iv_vec;
+  std::vector<unsigned char> tag_vec;
 
-    if      (!std::strcmp(k, OSSL_CIPHER_PARAM_KEYLEN))            OSSL_PARAM_get_size_t(q, &keylen);
-    else if (!std::strcmp(k, OSSL_CIPHER_PARAM_IV))                OSSL_PARAM_get_octet_string_ptr(q, &ivp, &ivsz);
-    else if (!std::strcmp(k, OSSL_CIPHER_PARAM_AEAD_TAG))          OSSL_PARAM_get_octet_string_ptr(q, &tagp, &tagsz);
-    else if (!std::strcmp(k, OSSL_CIPHER_PARAM_IVLEN))             OSSL_PARAM_get_size_t(q, &ivsz);
-    else if (!std::strcmp(k, OSSL_CIPHER_PARAM_AEAD_TAGLEN))       OSSL_PARAM_get_size_t(q, &tagsz);
+  for (const OSSL_PARAM* q = params; q && q->key; ++q) {
+    const char* k = q->key;
+    if (!k) break;
+
+    if (!std::strcmp(k, OSSL_CIPHER_PARAM_KEYLEN)) {
+      OSSL_PARAM_get_size_t(q, &keylen_hint);
+    } else if (!std::strcmp(k, OSSL_CIPHER_PARAM_IV)) {
+      const void* ptr = nullptr;
+      size_t sz = 0;
+      if (OSSL_PARAM_get_octet_string_ptr(q, &ptr, &sz) && ptr && sz > 0) {
+        iv_vec.assign(static_cast<const unsigned char*>(ptr),
+                      static_cast<const unsigned char*>(ptr) + sz);
+      }
+    } else if (!std::strcmp(k, OSSL_CIPHER_PARAM_IVLEN)) {
+      OSSL_PARAM_get_size_t(q, &ivlen_hint);
+    } else if (!std::strcmp(k, OSSL_CIPHER_PARAM_AEAD_TAG)) {
+      const void* ptr = nullptr;
+      size_t sz = 0;
+      if (OSSL_PARAM_get_octet_string_ptr(q, &ptr, &sz) && ptr && sz > 0) {
+        tag_vec.assign(static_cast<const unsigned char*>(ptr),
+                       static_cast<const unsigned char*>(ptr) + sz);
+      }
+    } else if (!std::strcmp(k, OSSL_CIPHER_PARAM_AEAD_TAGLEN)) {
+      OSSL_PARAM_get_size_t(q, &taglen_hint);
+    }
   }
 
-  ndjson_log_key_event(
-    SURFACE, api, "params", cname,
-    /*key*/nullptr, (int)keylen,
-    (const unsigned char*)ivp, (int)ivsz,
-    (const unsigned char*)tagp, (int)tagsz
-  );
+  if (ctx && cname && !iv_vec.empty()) {
+    openssl_state_remember_iv(ctx, cname, iv_vec.data(), iv_vec.size());
+  }
+
+  std::string dir = "params";
+  if (keylen_hint) dir += "[keylen=" + std::to_string(keylen_hint) + "]";
+  if (ivlen_hint) dir += "[ivlen=" + std::to_string(ivlen_hint) + "]";
+  if (taglen_hint) dir += "[taglen=" + std::to_string(taglen_hint) + "]";
+
+  ndjson_log_key_event(SURFACE,
+                       api,
+                       dir.c_str(),
+                       cname,
+                       nullptr,
+                       0,
+                       iv_vec.empty() ? nullptr : iv_vec.data(),
+                       static_cast<int>(iv_vec.size()),
+                       tag_vec.empty() ? nullptr : tag_vec.data(),
+                       static_cast<int>(tag_vec.size()));
 }
 
 // ---- ex2 호출에서 넘어온 key/iv도 즉시 로깅 ----
@@ -111,7 +147,7 @@ extern "C" int EVP_EncryptInit_ex2(EVP_CIPHER_CTX* ctx, const EVP_CIPHER* type,
 
   ReentryGuard g; if (!g) return real_EVP_EncryptInit_ex2(ctx, type, key, iv, params);
 
-  log_params_as_keyevent("EVP_EncryptInit_ex2", type, params);
+  log_params_and_update("EVP_EncryptInit_ex2", ctx, type, params);
   log_key_iv_from_ex2("EVP_EncryptInit_ex2", ctx, type, key, iv, "enc"); // 방향 힌트
   return real_EVP_EncryptInit_ex2(ctx, type, key, iv, params);
 }
@@ -125,7 +161,7 @@ extern "C" int EVP_DecryptInit_ex2(EVP_CIPHER_CTX* ctx, const EVP_CIPHER* type,
 
   ReentryGuard g; if (!g) return real_EVP_DecryptInit_ex2(ctx, type, key, iv, params);
 
-  log_params_as_keyevent("EVP_DecryptInit_ex2", type, params);
+  log_params_and_update("EVP_DecryptInit_ex2", ctx, type, params);
   log_key_iv_from_ex2("EVP_DecryptInit_ex2", ctx, type, key, iv, "dec");
   return real_EVP_DecryptInit_ex2(ctx, type, key, iv, params);
 }
@@ -139,7 +175,7 @@ extern "C" int EVP_CipherInit_ex2(EVP_CIPHER_CTX* ctx, const EVP_CIPHER* type,
 
   ReentryGuard g; if (!g) return real_EVP_CipherInit_ex2(ctx, type, key, iv, enc, params);
 
-  log_params_as_keyevent("EVP_CipherInit_ex2", type, params);
+  log_params_and_update("EVP_CipherInit_ex2", ctx, type, params);
   log_key_iv_from_ex2(enc ? "EVP_CipherInit_ex2.enc" : "EVP_CipherInit_ex2.dec",
                       ctx, type, key, iv, enc ? "enc":"dec");
   return real_EVP_CipherInit_ex2(ctx, type, key, iv, enc, params);
@@ -151,7 +187,7 @@ extern "C" int EVP_CIPHER_CTX_set_params(EVP_CIPHER_CTX* ctx, const OSSL_PARAM* 
   if (!real_EVP_CIPHER_CTX_set_params) return 0;
 
   ReentryGuard g; if (!g) return real_EVP_CIPHER_CTX_set_params(ctx, params);
-  log_params_as_keyevent("EVP_CIPHER_CTX_set_params", /*type*/cipher_from_ctx(ctx), params);
+  log_params_and_update("EVP_CIPHER_CTX_set_params", ctx, cipher_from_ctx(ctx), params);
   return real_EVP_CIPHER_CTX_set_params(ctx, params);
 }
 
@@ -161,7 +197,7 @@ extern "C" int EVP_CIPHER_CTX_get_params(EVP_CIPHER_CTX* ctx, OSSL_PARAM* params
   if (!real_EVP_CIPHER_CTX_get_params) return 0;
 
   ReentryGuard g; if (!g) return real_EVP_CIPHER_CTX_get_params(ctx, params);
-  log_params_as_keyevent("EVP_CIPHER_CTX_get_params", /*type*/cipher_from_ctx(ctx), params);
+  log_params_and_update("EVP_CIPHER_CTX_get_params", ctx, cipher_from_ctx(ctx), params);
   return real_EVP_CIPHER_CTX_get_params(ctx, params);
 }
 

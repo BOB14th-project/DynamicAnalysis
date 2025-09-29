@@ -289,6 +289,7 @@ if(ENABLE_AF_ALG)
         add_executable(af_alg_skcipher_aes_cbc_demo tests/af_alg/af_alg_skcipher_aes_cbc_demo.c)
         add_executable(af_alg_aes_gcm_demo tests/af_alg/af_alg_aes_gcm_demo.c)
         add_executable(af_alg_hmac_sha256_demo tests/af_alg/af_alg_hmac_sha256_demo.c)
+        add_executable(af_alg_akcipher_demo tests/af_alg/af_alg_akcipher_demo.c)
     else()
         message(WARNING "linux/if_alg.h not found; skipping AF_ALG demo build")
     endif()
@@ -372,7 +373,8 @@ if(ENABLE_AF_ALG AND HAVE_LINUX_IF_ALG_H)
     list(APPEND TEST_TARGETS
         af_alg_skcipher_aes_cbc_demo
         af_alg_aes_gcm_demo
-        af_alg_hmac_sha256_demo)
+        af_alg_hmac_sha256_demo
+        af_alg_akcipher_demo)
 endif()
 if(ENABLE_CRYPTODEV AND HAVE_CRYPTODEV_H)
     list(APPEND TEST_TARGETS
@@ -400,6 +402,7 @@ foreach(tgt IN LISTS TEST_TARGETS)
      NOT tgt STREQUAL "af_alg_skcipher_aes_cbc_demo" AND
      NOT tgt STREQUAL "af_alg_aes_gcm_demo" AND
      NOT tgt STREQUAL "af_alg_hmac_sha256_demo" AND
+     NOT tgt STREQUAL "af_alg_akcipher_demo" AND
      NOT tgt STREQUAL "cryptodev_aes_cbc_demo" AND
      NOT tgt STREQUAL "cryptodev_hmac_sha256_demo" AND
      NOT tgt STREQUAL "cryptodev_rsa_demo")
