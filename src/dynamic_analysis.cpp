@@ -18,6 +18,9 @@
   #include <sys/types.h>
   #include <sys/wait.h>
   #include <unistd.h>
+#elif defined(_WIN32) || defined(_WIN64)
+  #include <windows.h>
+  #include <detours.h>
 #endif
 
 namespace {
@@ -186,6 +189,133 @@ static int run_linux_dynamic_analysis(const std::filesystem::path& directory,
 }
 #endif
 
+#if defined(_WIN32) || defined(_WIN64)
+static std::filesystem::path locate_hook_dll() {
+    namespace fs = std::filesystem;
+    std::vector<fs::path> candidates;
+
+    // Check environment variable first
+    if (const char* env = std::getenv("HOOK_LIBRARY_PATH")) {
+        if (*env) candidates.emplace_back(env);
+    }
+
+    // Add standard search paths
+    std::error_code ec;
+    char module_path[MAX_PATH];
+    if (GetModuleFileName(nullptr, module_path, MAX_PATH) != 0) {
+        fs::path exe_path = fs::absolute(fs::path(module_path), ec);
+        fs::path bin_dir = exe_path.parent_path();
+        if (!bin_dir.empty()) {
+            fs::path build_dir = bin_dir.parent_path();
+            if (!build_dir.empty()) {
+                candidates.emplace_back(build_dir / "lib" / "hook.dll");
+                candidates.emplace_back(build_dir / "hook.dll");
+            }
+        }
+    }
+
+    candidates.emplace_back(std::filesystem::current_path() / "build" / "lib" / "hook.dll");
+    candidates.emplace_back(std::filesystem::current_path() / "build" / "hook.dll");
+    candidates.emplace_back(std::filesystem::current_path() / "hook.dll");
+
+    for (const auto& candidate : candidates) {
+        if (candidate.empty()) continue;
+        std::error_code exists_ec;
+        if (std::filesystem::exists(candidate, exists_ec) && !exists_ec) {
+            std::error_code canon_ec;
+            auto canonical_path = std::filesystem::canonical(candidate, canon_ec);
+            return canon_ec ? std::filesystem::absolute(candidate) : canonical_path;
+        }
+    }
+    return {};
+}
+
+static int run_windows_dynamic_analysis(const std::filesystem::path& directory,
+                                       const std::filesystem::path& binary) {
+    namespace fs = std::filesystem;
+
+    fs::path target = directory.empty() ? binary : directory / binary;
+    std::error_code ec;
+    target = fs::weakly_canonical(target, ec);
+    if (ec) target = fs::absolute(target);
+
+    if (!fs::exists(target)) {
+        std::cerr << "[dynamic_analysis] target not found: " << target << '\n';
+        return 1;
+    }
+
+    fs::path hook_dll = locate_hook_dll();
+    if (hook_dll.empty() || !fs::exists(hook_dll)) {
+        std::cerr << "[dynamic_analysis] unable to locate hook.dll" << '\n';
+        return 1;
+    }
+
+    fs::path logs_dir = fs::current_path() / "logs";
+    fs::create_directories(logs_dir);
+
+    fs::path log_file = logs_dir / (binary.filename().string() + ".ndjson");
+    std::error_code remove_ec;
+    fs::remove(log_file, remove_ec);
+
+    // Set environment variables
+    std::string log_path = log_file.string();
+    SetEnvironmentVariable("HOOK_NDJSON", log_path.c_str());
+    SetEnvironmentVariable("HOOK_VERBOSE", "1");
+
+    // Create process with DLL injection using Detours
+    STARTUPINFO si = { sizeof(si) };
+    PROCESS_INFORMATION pi = { 0 };
+
+    std::string cmd_line = "\"" + target.string() + "\"";
+    std::vector<char> cmd_buffer(cmd_line.begin(), cmd_line.end());
+    cmd_buffer.push_back('\0');
+
+    BOOL success = DetourCreateProcessWithDll(
+        target.c_str(),                    // Application name
+        cmd_buffer.data(),                 // Command line
+        nullptr,                           // Process security attributes
+        nullptr,                           // Thread security attributes
+        FALSE,                             // Inherit handles
+        0,                                 // Creation flags
+        nullptr,                           // Environment
+        nullptr,                           // Current directory
+        &si,                               // Startup info
+        &pi,                               // Process info
+        hook_dll.string().c_str(),         // DLL to inject
+        nullptr);                          // Additional DLLs
+
+    if (!success) {
+        std::cerr << "[dynamic_analysis] DetourCreateProcessWithDll failed: " << GetLastError() << '\n';
+        return 1;
+    }
+
+    // Wait for process completion
+    WaitForSingleObject(pi.hProcess, INFINITE);
+
+    DWORD exit_code;
+    GetExitCodeProcess(pi.hProcess, &exit_code);
+    std::cout << "[dynamic_analysis] child exit code: " << exit_code << '\n';
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+
+    // Read and display log file
+    std::ifstream in(log_file);
+    if (!in.good()) {
+        std::cout << "[dynamic_analysis] no hook output written." << '\n';
+        return exit_code;
+    }
+
+    std::cout << "[dynamic_analysis] captured events:" << '\n';
+    std::string line;
+    while (std::getline(in, line)) {
+        std::cout << line << '\n';
+    }
+
+    return exit_code;
+}
+#endif
+
 } // namespace
 
 int dynamic_analysis(const std::string& directory, const std::string& binary_name) {
@@ -199,9 +329,12 @@ int dynamic_analysis(const std::string& directory, const std::string& binary_nam
             return 1;
 #endif
         case HostOS::Windows:
-            std::cout << "[dynamic_analysis] host: Windows" << '\n';
-            std::cout << "[dynamic_analysis] Windows dynamic analysis is not implemented." << '\n';
+#if defined(_WIN32) || defined(_WIN64)
+            return run_windows_dynamic_analysis(directory, binary_name);
+#else
+            std::cerr << "[dynamic_analysis] built without Windows support." << '\n';
             return 1;
+#endif
         default:
             std::cout << "[dynamic_analysis] unsupported host platform." << '\n';
             return 1;

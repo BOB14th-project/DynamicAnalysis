@@ -45,18 +45,70 @@ else()
     message(WARNING "JNI not found - Java crypto hooks will be disabled")
 endif()
 
+# ── Platform-specific hook sources
+if(WIN32)
+    set(PLATFORM_HOOK_SRCS
+        src/Windows/windows_hook_dll.cpp
+        src/Windows/hooks/hook_openssl_detours.cpp
+        src/Windows/hooks/hook_openssl_state.cpp
+    )
+    # Windows-specific libraries
+    find_package(detours QUIET)
+    if(NOT detours_FOUND)
+        message(STATUS "Detours not found via find_package, trying manual detection...")
+        find_path(DETOURS_INCLUDE_DIR detours.h
+                  PATHS "C:/Program Files/Microsoft Research/Detours/include"
+                        "C:/dev/detours/include"
+                        "$ENV{DETOURS_ROOT}/include")
+        find_library(DETOURS_LIBRARY detours
+                     PATHS "C:/Program Files/Microsoft Research/Detours/lib.X64"
+                           "C:/dev/detours/lib.X64"
+                           "$ENV{DETOURS_ROOT}/lib.X64")
+        if(DETOURS_INCLUDE_DIR AND DETOURS_LIBRARY)
+            set(detours_FOUND TRUE)
+            message(STATUS "Found Detours: ${DETOURS_INCLUDE_DIR}")
+        endif()
+    endif()
+else()
+    set(PLATFORM_HOOK_SRCS
+        # Linux hooks (existing)
+        src/Linux/hooks/hook_af_alg.cpp
+        src/Linux/hooks/hook_openssl_core.cpp
+        src/Linux/hooks/hook_openssl_ecc.cpp
+        src/Linux/hooks/hook_openssl_provider.cpp
+        src/Linux/hooks/hook_openssl_state.cpp
+        src/Linux/hooks/hook_cryptodev.cpp
+        src/Linux/hooks/hook_libsodium.cpp
+        src/Linux/hooks/hook_gnutls.cpp
+        src/Linux/hooks/hook_mbedtls.cpp
+        src/Linux/hooks/hook_nss.cpp
+        src/Linux/hooks/hook_wolfssl.cpp
+        src/Linux/hooks/hook_boringssl.cpp
+        src/Linux/hooks/hook_java_native_crypto.cpp
+        src/Linux/hooks/hook_jni.cpp
+        src/Linux/hooks/hook_pycryptodome.cpp
+    )
+endif()
+
 # ── Hook 라이브러리 소스
 set(HOOK_SRCS
     src/init.cpp
     src/log.cpp
-    src/resolver.cpp
     src/utils/crypto_utils.cpp
     src/utils/output.cpp
-    src/utils/elf_analyzer.cpp
 )
 
-if(UNIX)
+# Platform-specific sources
+if(WIN32)
     list(APPEND HOOK_SRCS
+        ${PLATFORM_HOOK_SRCS}
+        # Windows-specific utilities
+        # src/Windows/utils/windows_utils.cpp  # Add if needed
+    )
+elseif(UNIX)
+    list(APPEND HOOK_SRCS
+        src/resolver.cpp  # Linux-specific symbol resolution
+        src/utils/elf_analyzer.cpp  # Linux-specific ELF analysis
         src/Linux/hooks/hook_openssl_core.cpp
         src/Linux/hooks/hook_openssl_provider.cpp
         src/Linux/hooks/hook_openssl_ecc.cpp
@@ -88,21 +140,54 @@ endif()
 
 add_library(hook SHARED ${HOOK_SRCS})
 target_precompile_headers(hook PRIVATE ${CMAKE_SOURCE_DIR}/include/pch.h)
-target_compile_options(hook PRIVATE -O2 -fPIC -fno-omit-frame-pointer -Wall -Wextra)
-target_link_libraries(hook PRIVATE dl pthread OpenSSL::Crypto)
+
+# Platform-specific compilation and linking
+if(WIN32)
+    # Windows-specific compile options
+    target_compile_options(hook PRIVATE /O2 /W3 /EHsc)
+    target_compile_definitions(hook PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+
+    # Windows-specific libraries
+    target_link_libraries(hook PRIVATE OpenSSL::Crypto)
+
+    if(detours_FOUND)
+        if(DETOURS_INCLUDE_DIR)
+            target_include_directories(hook PRIVATE ${DETOURS_INCLUDE_DIR})
+        endif()
+        if(DETOURS_LIBRARY)
+            target_link_libraries(hook PRIVATE ${DETOURS_LIBRARY})
+        else()
+            target_link_libraries(hook PRIVATE detours)
+        endif()
+    else()
+        message(FATAL_ERROR "Detours library is required for Windows builds but was not found")
+    endif()
+else()
+    # Linux-specific compile options
+    target_compile_options(hook PRIVATE -O2 -fPIC -fno-omit-frame-pointer -Wall -Wextra)
+    target_link_libraries(hook PRIVATE dl pthread OpenSSL::Crypto)
+endif()
 
 # Java 지원이 가능한 경우 JNI 라이브러리 링크
 if(JNI_FOUND)
     target_link_libraries(hook PRIVATE ${JNI_LIBRARIES})
 endif()
 
-# ── OpenSSL 테스트 (암호화 경로별 커버리지)
+# ── OpenSSL 테스트 (암호화 경로별 커버리지) - 크로스 플랫폼
 add_executable(openssl_aes_lib_test                 tests/openssl/symmetric/openssl_aes_lib_test.cpp)
 add_executable(openssl_symm_aes_gcm_test            tests/openssl/aead/openssl_symm_aes_gcm_test.cpp)
 add_executable(openssl_ecc_sign_test                tests/openssl/ecc/openssl_ecc_sign_test.cpp)
 add_executable(openssl_ecc_ecies_test               tests/openssl/ecc/openssl_ecc_ecies_test.cpp)
 add_executable(openssl_provider_ex2_test            tests/openssl/provider/openssl_provider_ex2_test.cpp)
 add_executable(openssl_provider_ex2_params_test     tests/openssl/provider/openssl_provider_ex2_params_test.cpp)
+
+# 모든 OpenSSL 테스트는 크로스 플랫폼으로 OpenSSL::Crypto 링크
+target_link_libraries(openssl_aes_lib_test PRIVATE OpenSSL::Crypto)
+target_link_libraries(openssl_symm_aes_gcm_test PRIVATE OpenSSL::Crypto)
+target_link_libraries(openssl_ecc_sign_test PRIVATE OpenSSL::Crypto)
+target_link_libraries(openssl_ecc_ecies_test PRIVATE OpenSSL::Crypto)
+target_link_libraries(openssl_provider_ex2_test PRIVATE OpenSSL::Crypto)
+target_link_libraries(openssl_provider_ex2_params_test PRIVATE OpenSSL::Crypto)
 
 # ── libsodium 테스트 (선택적)
 set(LIBSODIUM_FOUND OFF)
