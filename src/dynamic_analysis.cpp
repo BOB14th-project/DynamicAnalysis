@@ -206,6 +206,8 @@ static std::filesystem::path locate_hook_dll() {
         fs::path exe_path = fs::absolute(fs::path(module_path), ec);
         fs::path bin_dir = exe_path.parent_path();
         if (!bin_dir.empty()) {
+            // Try bin directory first (for Release/Debug builds)
+            candidates.emplace_back(bin_dir / "hook.dll");
             fs::path build_dir = bin_dir.parent_path();
             if (!build_dir.empty()) {
                 candidates.emplace_back(build_dir / "lib" / "hook.dll");
@@ -214,6 +216,7 @@ static std::filesystem::path locate_hook_dll() {
         }
     }
 
+    candidates.emplace_back(std::filesystem::current_path() / "build-windows" / "bin" / "Release" / "hook.dll");
     candidates.emplace_back(std::filesystem::current_path() / "build" / "lib" / "hook.dll");
     candidates.emplace_back(std::filesystem::current_path() / "build" / "hook.dll");
     candidates.emplace_back(std::filesystem::current_path() / "hook.dll");
@@ -270,8 +273,11 @@ static int run_windows_dynamic_analysis(const std::filesystem::path& directory,
     std::vector<char> cmd_buffer(cmd_line.begin(), cmd_line.end());
     cmd_buffer.push_back('\0');
 
+    std::string target_str = target.string();
+    std::string hook_dll_str = hook_dll.string();
+
     BOOL success = DetourCreateProcessWithDll(
-        target.c_str(),                    // Application name
+        target_str.c_str(),                // Application name
         cmd_buffer.data(),                 // Command line
         nullptr,                           // Process security attributes
         nullptr,                           // Thread security attributes
@@ -281,7 +287,7 @@ static int run_windows_dynamic_analysis(const std::filesystem::path& directory,
         nullptr,                           // Current directory
         &si,                               // Startup info
         &pi,                               // Process info
-        hook_dll.string().c_str(),         // DLL to inject
+        hook_dll_str.c_str(),              // DLL to inject
         nullptr);                          // Additional DLLs
 
     if (!success) {

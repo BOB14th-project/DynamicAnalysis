@@ -91,22 +91,22 @@ else()
 endif()
 
 # ── Hook 라이브러리 소스
-set(HOOK_SRCS
-    src/init.cpp
-    src/log.cpp
-    src/utils/crypto_utils.cpp
-    src/utils/output.cpp
-)
+set(HOOK_SRCS)
 
 # Platform-specific sources
 if(WIN32)
     list(APPEND HOOK_SRCS
         ${PLATFORM_HOOK_SRCS}
         # Windows-specific utilities
-        # src/Windows/utils/windows_utils.cpp  # Add if needed
+        src/Windows/utils/output.cpp
+        src/Windows/utils/crypto_utils.cpp
     )
 elseif(UNIX)
     list(APPEND HOOK_SRCS
+        src/init.cpp  # Linux-specific initialization
+        src/log.cpp   # Linux-specific logging
+        src/utils/output.cpp  # Linux NDJSON output
+        src/utils/crypto_utils.cpp  # Linux crypto utilities
         src/resolver.cpp  # Linux-specific symbol resolution
         src/utils/elf_analyzer.cpp  # Linux-specific ELF analysis
         src/Linux/hooks/hook_openssl_core.cpp
@@ -400,6 +400,14 @@ add_executable(dynamic_analysis_cli src/main.cpp src/dynamic_analysis.cpp)
 
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS "9")
     target_link_libraries(dynamic_analysis_cli PRIVATE stdc++fs)
+endif()
+
+# Windows: Add Detours include path for dynamic_analysis_cli
+if(WIN32 AND DETOURS_INCLUDE_DIR)
+    target_include_directories(dynamic_analysis_cli PRIVATE ${DETOURS_INCLUDE_DIR})
+    if(DETOURS_LIBRARY)
+        target_link_libraries(dynamic_analysis_cli PRIVATE ${DETOURS_LIBRARY})
+    endif()
 endif()
 
 # Java 지원이 가능한 경우 Java 테스트 추가

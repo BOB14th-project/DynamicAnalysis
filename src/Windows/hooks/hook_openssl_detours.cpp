@@ -69,7 +69,7 @@ static int WINAPI DetourEVP_EncryptInit_ex(EVP_CIPHER_CTX* ctx,
                                            const unsigned char* iv)
 {
     ReentryGuard guard;
-    if (!guard.is_active()) {
+    if (guard) {
         log_init_ex("EVP_EncryptInit_ex", "enc", ctx, type, key, iv);
     }
     return TrueEVP_EncryptInit_ex(ctx, type, impl, key, iv);
@@ -82,7 +82,7 @@ static int WINAPI DetourEVP_DecryptInit_ex(EVP_CIPHER_CTX* ctx,
                                           const unsigned char* iv)
 {
     ReentryGuard guard;
-    if (!guard.is_active()) {
+    if (guard) {
         log_init_ex("EVP_DecryptInit_ex", "dec", ctx, type, key, iv);
     }
     return TrueEVP_DecryptInit_ex(ctx, type, impl, key, iv);
@@ -96,7 +96,7 @@ static int WINAPI DetourEVP_CipherInit_ex(EVP_CIPHER_CTX* ctx,
                                          int enc)
 {
     ReentryGuard guard;
-    if (!guard.is_active()) {
+    if (guard) {
         const char* dir = (enc == 1) ? "enc" : (enc == 0) ? "dec" : "cipher";
         log_init_ex("EVP_CipherInit_ex", dir, ctx, type, key, iv);
     }
@@ -110,7 +110,7 @@ static int WINAPI DetourEVP_CIPHER_CTX_ctrl(EVP_CIPHER_CTX* ctx, int type, int a
     // Call original first to avoid corrupting state
     int result = TrueEVP_CIPHER_CTX_ctrl(ctx, type, arg, ptr);
 
-    if (!guard.is_active()) {
+    if (guard) {
         // Log GCM tag extraction (EVP_CTRL_GCM_GET_TAG = 16)
         if (type == 16 && ptr && arg > 0) { // EVP_CTRL_GCM_GET_TAG
             OpenSSLState st;
@@ -133,6 +133,8 @@ static int WINAPI DetourEVP_CIPHER_CTX_ctrl(EVP_CIPHER_CTX* ctx, int type, int a
 }
 
 // ---- Detours initialization ----
+extern "C" {
+
 BOOL InstallOpenSSLHooks()
 {
     BOOL success = TRUE;
@@ -172,3 +174,5 @@ BOOL UninstallOpenSSLHooks()
 
     return success;
 }
+
+} // extern "C"

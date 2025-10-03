@@ -2,9 +2,27 @@
 #include "pch.h"
 #include "hook_common.h"
 #include "hooks/hook_windows.h"
+#include "output.h"
 
 #include <windows.h>
 #include <detours.h>
+
+// Windows-specific runtime initialization
+static int g_verbose = 0;
+
+extern "C" int hook_is_verbose(void) { return g_verbose; }
+
+extern "C" void hook_runtime_init(void) {
+    // Check for verbose mode environment variable
+    char* v = nullptr;
+    size_t len = 0;
+    _dupenv_s(&v, &len, HOOK_ENV_VERBOSE);
+    g_verbose = (v && *v && v[0] != '0') ? 1 : 0;
+    if (v) free(v);
+
+    // Initialize NDJSON logging
+    ndjson_init_from_env();
+}
 
 // DLL entry point
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserved)

@@ -10,6 +10,7 @@ venv/
 ENV/
 
 # --- Build artifacts (CMake / Make)
+build-windows/
 build/
 cmake-build-*/
 CMakeFiles/

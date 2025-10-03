@@ -6,10 +6,12 @@
 #include <cstdlib>
 #include <cstring>
 
+#ifndef _WIN32
 #include <unistd.h>
 #include <pthread.h>
 #include <dlfcn.h>
 #include <fcntl.h>
+#endif
 
 #include <stddef.h>
 #include <stdint.h>
