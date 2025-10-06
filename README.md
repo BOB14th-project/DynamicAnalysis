@@ -37,7 +37,7 @@ cmake -S . -B build-windows `
   -DCMAKE_PREFIX_PATH="C:/dev/detours"
 cmake --build build-windows --config Release
 ```
-> vcpkg에 `libsodium`, `mbedtls`, `wolfssl`이 설치되어 있다는 가정을 따릅니다. Detours 경로가 다르면 `-DCMAKE_PREFIX_PATH` 값을 맞춰 주세요.
+> vcpkg toolchain이 설정되어 있다는 가정입니다. Detours 경로가 다르면 `-DCMAKE_PREFIX_PATH` 값을 맞춰 주세요.
 
 **주요 산출물:**
 - **Linux**: `build-linux/lib/libhook.so`, `build-linux/bin/dynamic_analysis_cli`
@@ -201,7 +201,7 @@ cat logs/analysis.ndjson
 - OpenSSL 이외의 샘플들(libsodium, GnuTLS, NSS 등)은 기본 빌드에 포함되지 않습니다.
 
 ### Windows 전용
-- **OpenSSL + libsodium 지원**: Detours 기반으로 OpenSSL EVP와 (libsodium 설치 시) chacha20poly1305 / secretbox / box / ed25519 API를 후킹합니다. 그 외 라이브러리는 추후 확장 예정입니다.
+- **현재 OpenSSL만 지원**: Detours 기반으로 OpenSSL EVP 경로를 후킹합니다. 기타 라이브러리는 추후 확장 예정입니다.
 - **관리자 권한**: DLL 인젝션 시 관리자 권한이 필요할 수 있습니다.
 - **Detours 의존성**: Microsoft Detours 라이브러리가 반드시 필요합니다.
 - **동적 링크 필요**: 정적 링크된 OpenSSL을 사용하는 프로그램은 후킹되지 않습니다.

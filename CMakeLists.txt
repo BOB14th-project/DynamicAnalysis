@@ -28,12 +28,6 @@ include_directories(
 # OpenSSL 필요 (openssl 훅/테스트)
 find_package(OpenSSL REQUIRED)
 
-if(WIN32)
-  find_package(unofficial-sodium CONFIG QUIET)
-  find_package(MbedTLS CONFIG QUIET)
-  find_package(wolfssl CONFIG QUIET)
-endif()
-
 # ── 빌드 옵션
 option(ENABLE_AF_ALG      "Build AF_ALG hook (Linux kernel crypto sockets)" ON)
 option(ENABLE_CRYPTODEV   "Build cryptodev hook (ioctl-based)"              OFF)
@@ -72,10 +66,6 @@ if(WIN32)
         src/platform/windows/utils/windows_output.cpp
         src/platform/windows/utils/windows_crypto_utils.cpp
     )
-
-    if(unofficial-sodium_FOUND)
-        list(APPEND HOOK_SRCS src/platform/windows/hooks/windows_hook_libsodium.cpp)
-    endif()
 
     # Windows-specific libraries
     find_package(detours QUIET)
@@ -143,11 +133,6 @@ if(WIN32)
 
     # Windows-specific libraries
     target_link_libraries(hook PRIVATE OpenSSL::Crypto)
-
-    if(unofficial-sodium_FOUND)
-        target_compile_definitions(hook PRIVATE HAVE_WINDOWS_LIBSODIUM)
-        target_link_libraries(hook PRIVATE unofficial-sodium::sodium)
-    endif()
 
     if(detours_FOUND)
         if(DETOURS_INCLUDE_DIR)
@@ -446,19 +431,19 @@ if(LIBSODIUM_FOUND)
         libsodium_box_demo
         libsodium_sign_demo)
 endif()
-if(GNUTLS_FOUND)
+if(UNIX AND GNUTLS_FOUND)
     list(APPEND TEST_TARGETS
         gnutls_aes_gcm_demo
         gnutls_aes_gcm_roundtrip_demo
         gnutls_aes_cbc_demo)
 endif()
-if(NSS_FOUND)
+if(UNIX AND NSS_FOUND)
     list(APPEND TEST_TARGETS
         nss_aes_gcm_demo
         nss_aes_gcm_roundtrip_demo
         nss_aes_cbc_demo)
 endif()
-if(MBEDTLS_FOUND)
+if(UNIX AND MBEDTLS_FOUND)
     list(APPEND TEST_TARGETS
         mbedtls_aes_gcm_demo
         mbedtls_hmac_sha256_demo)
@@ -469,21 +454,21 @@ if(MBEDTLS_FOUND)
         list(APPEND TEST_TARGETS mbedtls_rsa_demo)
     endif()
 endif()
-if(BORINGSSL_FOUND)
+if(UNIX AND BORINGSSL_FOUND)
     list(APPEND TEST_TARGETS
         boringssl_aes_gcm_demo
         boringssl_aes_gcm_roundtrip_demo
         boringssl_chacha20_poly1305_demo
         boringssl_xchacha20_poly1305_demo)
 endif()
-if(ENABLE_AF_ALG AND HAVE_LINUX_IF_ALG_H)
+if(UNIX AND ENABLE_AF_ALG AND HAVE_LINUX_IF_ALG_H)
     list(APPEND TEST_TARGETS
         af_alg_skcipher_aes_cbc_demo
         af_alg_aes_gcm_demo
         af_alg_hmac_sha256_demo
         af_alg_akcipher_demo)
 endif()
-if(ENABLE_CRYPTODEV AND HAVE_CRYPTODEV_H)
+if(UNIX AND ENABLE_CRYPTODEV AND HAVE_CRYPTODEV_H)
     list(APPEND TEST_TARGETS
         cryptodev_aes_cbc_demo
         cryptodev_hmac_sha256_demo

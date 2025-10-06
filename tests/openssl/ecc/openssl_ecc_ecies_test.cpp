@@ -118,7 +118,7 @@ std::string aes256gcm_decrypt(const std::vector<unsigned char>& key,
     tot += outl;
     if (EVP_CIPHER_CTX_ctrl(ctx.get(), EVP_CTRL_GCM_SET_TAG, (int)tag.size(), (void*)tag.data()) <= 0)
         ossl_throw("SET_TAG");
-    // FinalÀº ÀÎÁõ ½ÇÆĞ½Ã 0 ¹İÈ¯
+    // Finalì€ ì¸ì¦ ì‹¤íŒ¨ì‹œ 0 ë°˜í™˜
     if (EVP_DecryptFinal_ex(ctx.get(), (unsigned char*)out.data()+tot, &outl) <= 0) ossl_throw("DecryptFinal");
     tot += outl; out.resize(tot);
     return out;
@@ -148,7 +148,7 @@ std::vector<unsigned char> ecies_encrypt(EVP_PKEY* receiver_pub, std::string_vie
     // 2) ECDH
     auto secret = ecdh_shared_secret(eph.get(), receiver_pub);
 
-    // 3) HKDF ¡æ 32B key (salt: empty, info: "ECIES-P256-GCM")
+    // 3) HKDF â†’ 32B key (salt: empty, info: "ECIES-P256-GCM")
     auto key = hkdf_sha256(secret, "ECIES-P256-GCM", {}, 32);
 
     // 4) AEAD
@@ -168,13 +168,13 @@ std::vector<unsigned char> ecies_encrypt(EVP_PKEY* receiver_pub, std::string_vie
 // decrypt: parse epk_der from head (SPKI is DER, variable-length)
 std::string ecies_decrypt(EVP_PKEY* receiver_priv, const std::vector<unsigned char>& pkg) {
     // 1) pull ephemeral pubkey DER
-    //    SPKI´Â DERÀÌ¹Ç·Î ±æÀÌ¸¦ ¾Ë±â À§ÇØ d2i_PUBKEY¸¦ ÇÑ¹ø ½ÃµµÇØº¸´Â ¹æ½ÄÀÌ Á¦ÀÏ ¾ÈÀü.
-    //    ¿©±â¼± °£´ÜÈ÷: d2i_PUBKEY°¡ ¼º°øÇÏ´Â ÃÖ¼Ò ±æÀÌ¸¦ Ã£´Â´Ù.
+    //    SPKIëŠ” DERì´ë¯€ë¡œ ê¸¸ì´ë¥¼ ì•Œê¸° ìœ„í•´ d2i_PUBKEYë¥¼ í•œë²ˆ ì‹œë„í•´ë³´ëŠ” ë°©ì‹ì´ ì œì¼ ì•ˆì „.
+    //    ì—¬ê¸°ì„  ê°„ë‹¨íˆ: d2i_PUBKEYê°€ ì„±ê³µí•˜ëŠ” ìµœì†Œ ê¸¸ì´ë¥¼ ì°¾ëŠ”ë‹¤.
     size_t epk_len = 0;
     {
-        // DERÀº ¾Õ 2~4¹ÙÀÌÆ®¿¡¼­ ±æÀÌ°¡ ³ª¿ÀÁö¸¸, ±¸Çö ´Ü¼øÈ­¸¦ À§ÇØ ºê·çÆ® È®Àå.
-        // ½ÇÁ¦¿¡¼± º°µµ DER ÆÄ¼­¸¦ ¾²°Å³ª ÆĞÅ°Áö¿¡ epk_len(4B) ÇÁ¸®ÇÈ½º¸¦ µÎ´Â °É ±ÇÀå.
-        for (size_t probe = 64; probe <= 200; ++probe) { // P-256 SPKI´Â º¸Åë ~91B
+        // DERì€ ì• 2~4ë°”ì´íŠ¸ì—ì„œ ê¸¸ì´ê°€ ë‚˜ì˜¤ì§€ë§Œ, êµ¬í˜„ ë‹¨ìˆœí™”ë¥¼ ìœ„í•´ ë¸Œë£¨íŠ¸ í™•ì¥.
+        // ì‹¤ì œì—ì„  ë³„ë„ DER íŒŒì„œë¥¼ ì“°ê±°ë‚˜ íŒ¨í‚¤ì§€ì— epk_len(4B) í”„ë¦¬í”½ìŠ¤ë¥¼ ë‘ëŠ” ê±¸ ê¶Œì¥.
+        for (size_t probe = 64; probe <= 200; ++probe) { // P-256 SPKIëŠ” ë³´í†µ ~91B
             try {
                 (void)parse_pubkey_spki(pkg.data(), probe);
                 epk_len = probe; break;
@@ -184,7 +184,7 @@ std::string ecies_decrypt(EVP_PKEY* receiver_priv, const std::vector<unsigned ch
     }
     up_pkey eph_pub = parse_pubkey_spki(pkg.data(), epk_len);
 
-    // 2) ºĞÇØ
+    // 2) ë¶„í•´
     const size_t IVLEN = 12, TAGLEN = 16;
     if (pkg.size() < epk_len + IVLEN + TAGLEN) throw std::runtime_error("package too short");
 
