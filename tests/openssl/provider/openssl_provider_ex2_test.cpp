@@ -35,10 +35,11 @@ int main() {
     EVP_CIPHER_CTX* ectx = EVP_CIPHER_CTX_new();
     const EVP_CIPHER* ciph = EVP_aes_256_gcm();  // provider 기본
 
-    OSSL_PARAM eparams[2];
-    eparams[0] = OSSL_PARAM_construct_size_t(OSSL_CIPHER_PARAM_IVLEN,
-                                             const_cast<size_t*>(&IVLEN));
-    eparams[1] = OSSL_PARAM_construct_end();
+    OSSL_PARAM eparams[] = {
+        OSSL_PARAM_construct_size_t(OSSL_CIPHER_PARAM_IVLEN,
+                                    const_cast<size_t*>(&IVLEN)),
+        OSSL_PARAM_construct_end()
+    };
 
     if (!EVP_EncryptInit_ex2(ectx, ciph, key.data(), iv.data(), eparams)) {
         std::cerr << "EncryptInit_ex2 failed\n"; return 1;
@@ -70,12 +71,13 @@ int main() {
     EVP_CIPHER_CTX* dctx = EVP_CIPHER_CTX_new();
 
     // 복호에서는 태그를 params로 전달 가능
-    OSSL_PARAM dparams[3];
-    dparams[0] = OSSL_PARAM_construct_size_t(OSSL_CIPHER_PARAM_IVLEN,
-                                             const_cast<size_t*>(&IVLEN));
-    dparams[1] = OSSL_PARAM_construct_octet_string(OSSL_CIPHER_PARAM_AEAD_TAG,
-                                                   tag.data(), tag.size());
-    dparams[2] = OSSL_PARAM_construct_end();
+    OSSL_PARAM dparams[] = {
+        OSSL_PARAM_construct_size_t(OSSL_CIPHER_PARAM_IVLEN,
+                                    const_cast<size_t*>(&IVLEN)),
+        OSSL_PARAM_construct_octet_string(OSSL_CIPHER_PARAM_AEAD_TAG,
+                                          tag.data(), tag.size()),
+        OSSL_PARAM_construct_end()
+    };
 
     if (!EVP_DecryptInit_ex2(dctx, ciph, key.data(), iv.data(), dparams)) {
         std::cerr << "DecryptInit_ex2 failed\n"; return 1;

@@ -36,6 +36,11 @@ option(ENABLE_MBEDTLS     "Build mbedTLS demos"                             ON)
 option(HOOK_VERBOSE       "Verbose logging inside hooks"                    OFF)
 option(HOOK_MASK          "Mask key/iv/tag in NDJSON (hash/trunc)"          OFF)
 
+if(MSVC)
+    add_compile_options(/utf-8)
+    add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
+endif()
+
 if(HOOK_VERBOSE)
   add_compile_definitions(HOOK_VERBOSE=1)
 endif()
