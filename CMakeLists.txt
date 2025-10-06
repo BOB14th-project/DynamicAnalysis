@@ -62,9 +62,9 @@ if(WIN32)
     set(HOOK_SRCS
         src/platform/windows/core/windows_hook_dll.cpp
         src/platform/windows/hooks/hook_openssl_detours.cpp
-        src/platform/windows/hooks/hook_openssl_state.cpp
-        src/platform/windows/utils/output.cpp
-        src/platform/windows/utils/crypto_utils.cpp
+        src/platform/windows/hooks/windows_hook_openssl_state.cpp
+        src/platform/windows/utils/windows_output.cpp
+        src/platform/windows/utils/windows_crypto_utils.cpp
     )
 
     # Windows-specific libraries
@@ -89,13 +89,13 @@ elseif(UNIX)
         src/platform/linux/core/init.cpp
         src/platform/linux/core/log.cpp
         src/platform/linux/core/resolver.cpp
-        src/platform/linux/utils/output.cpp
-        src/platform/linux/utils/crypto_utils.cpp
+        src/platform/linux/utils/linux_output.cpp
+        src/platform/linux/utils/linux_crypto_utils.cpp
         src/platform/linux/utils/elf_analyzer.cpp
         src/platform/linux/hooks/hook_openssl_core.cpp
         src/platform/linux/hooks/hook_openssl_provider.cpp
         src/platform/linux/hooks/hook_openssl_ecc.cpp
-        src/platform/linux/hooks/hook_openssl_state.cpp
+        src/platform/linux/hooks/linux_hook_openssl_state.cpp
         src/platform/linux/hooks/hook_pycryptodome.cpp
     )
 
