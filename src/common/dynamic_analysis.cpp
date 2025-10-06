@@ -11,6 +11,8 @@
 #include <vector>
 
 #include <cerrno>
+#include <chrono>
+#include <ctime>
 
 #if defined(__linux__)
   #include <sys/stat.h>
@@ -29,6 +31,43 @@ enum class HostOS {
     Windows,
     Unsupported
 };
+
+static std::string make_timestamp_suffix() {
+    using clock = std::chrono::system_clock;
+    auto now = clock::now();
+    std::time_t tt = clock::to_time_t(now);
+    std::tm tm{};
+#if defined(_WIN32) || defined(_WIN64)
+    localtime_s(&tm, &tt);
+#else
+    localtime_r(&tt, &tm);
+#endif
+    char buf[32];
+    if (std::strftime(buf, sizeof(buf), "%Y%m%d_%H%M%S", &tm) == 0) {
+        return "unknown";
+    }
+    return buf;
+}
+
+static std::filesystem::path default_log_path(const std::filesystem::path& binary_name) {
+    namespace fs = std::filesystem;
+    fs::path logs_dir = fs::current_path() / "logs";
+    std::error_code ec;
+    fs::create_directories(logs_dir, ec);
+
+    fs::path stem_path = binary_name;
+    if (stem_path.has_extension()) {
+        stem_path = stem_path.stem();
+    } else {
+        stem_path = stem_path.filename();
+    }
+    std::string stem = stem_path.string();
+    if (stem.empty()) {
+        stem = "target";
+    }
+    std::string log_filename = stem + "_" + make_timestamp_suffix() + ".ndjson";
+    return logs_dir / log_filename;
+}
 
 static HostOS detect_host_os() {
 #if defined(_WIN32) || defined(_WIN64)
@@ -108,10 +147,15 @@ static int run_linux_dynamic_analysis(const std::filesystem::path& directory,
         return 1;
     }
 
-    fs::path logs_dir = fs::current_path() / "logs";
-    fs::create_directories(logs_dir);
-
-    fs::path log_file = logs_dir / (binary.filename().string() + ".ndjson");
+    fs::path log_file;
+    if (const char* existing = std::getenv("HOOK_NDJSON"); existing && *existing) {
+        log_file = existing;
+    } else {
+        log_file = default_log_path(binary.filename());
+    }
+    if (!log_file.parent_path().empty()) {
+        fs::create_directories(log_file.parent_path());
+    }
     std::error_code remove_ec;
     fs::remove(log_file, remove_ec);
 
@@ -252,10 +296,24 @@ static int run_windows_dynamic_analysis(const std::filesystem::path& directory,
         return 1;
     }
 
-    fs::path logs_dir = fs::current_path() / "logs";
-    fs::create_directories(logs_dir);
-
-    fs::path log_file = logs_dir / (binary.filename().string() + ".ndjson");
+    fs::path log_file;
+    std::string existing_log;
+    {
+        DWORD needed = GetEnvironmentVariableA("HOOK_NDJSON", nullptr, 0);
+        if (needed > 0) {
+            existing_log.resize(needed - 1);
+            GetEnvironmentVariableA("HOOK_NDJSON", existing_log.data(), needed);
+        }
+    }
+    if (!existing_log.empty()) {
+        log_file = fs::path(existing_log);
+    } else {
+        log_file = default_log_path(binary.filename());
+    }
+    if (!log_file.parent_path().empty()) {
+        std::error_code mk_ec;
+        fs::create_directories(log_file.parent_path(), mk_ec);
+    }
     std::error_code remove_ec;
     fs::remove(log_file, remove_ec);
 
