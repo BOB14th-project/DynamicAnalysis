@@ -28,6 +28,12 @@ include_directories(
 # OpenSSL 필요 (openssl 훅/테스트)
 find_package(OpenSSL REQUIRED)
 
+if(WIN32)
+  find_package(unofficial-sodium CONFIG QUIET)
+  find_package(MbedTLS CONFIG QUIET)
+  find_package(wolfssl CONFIG QUIET)
+endif()
+
 # ── 빌드 옵션
 option(ENABLE_AF_ALG      "Build AF_ALG hook (Linux kernel crypto sockets)" ON)
 option(ENABLE_CRYPTODEV   "Build cryptodev hook (ioctl-based)"              OFF)
@@ -61,11 +67,15 @@ endif()
 if(WIN32)
     set(HOOK_SRCS
         src/platform/windows/core/windows_hook_dll.cpp
-        src/platform/windows/hooks/hook_openssl_detours.cpp
+        src/platform/windows/hooks/windows_hook_openssl_detours.cpp
         src/platform/windows/hooks/windows_hook_openssl_state.cpp
         src/platform/windows/utils/windows_output.cpp
         src/platform/windows/utils/windows_crypto_utils.cpp
     )
+
+    if(unofficial-sodium_FOUND)
+        list(APPEND HOOK_SRCS src/platform/windows/hooks/windows_hook_libsodium.cpp)
+    endif()
 
     # Windows-specific libraries
     find_package(detours QUIET)
@@ -92,29 +102,29 @@ elseif(UNIX)
         src/platform/linux/utils/linux_output.cpp
         src/platform/linux/utils/linux_crypto_utils.cpp
         src/platform/linux/utils/elf_analyzer.cpp
-        src/platform/linux/hooks/hook_openssl_core.cpp
-        src/platform/linux/hooks/hook_openssl_provider.cpp
-        src/platform/linux/hooks/hook_openssl_ecc.cpp
+        src/platform/linux/hooks/linux_hook_openssl_core.cpp
+        src/platform/linux/hooks/linux_hook_openssl_provider.cpp
+        src/platform/linux/hooks/linux_hook_openssl_ecc.cpp
         src/platform/linux/hooks/linux_hook_openssl_state.cpp
-        src/platform/linux/hooks/hook_pycryptodome.cpp
+        src/platform/linux/hooks/linux_hook_pycryptodome.cpp
     )
 
     if(ENABLE_LIBSODIUM)
-        list(APPEND HOOK_SRCS src/platform/linux/hooks/hook_libsodium.cpp)
+        list(APPEND HOOK_SRCS src/platform/linux/hooks/linux_hook_libsodium.cpp)
     endif()
 
     if(ENABLE_AF_ALG)
-        list(APPEND HOOK_SRCS src/platform/linux/hooks/hook_af_alg.cpp)
+        list(APPEND HOOK_SRCS src/platform/linux/hooks/linux_hook_af_alg.cpp)
     endif()
 
     if(ENABLE_CRYPTODEV)
-        list(APPEND HOOK_SRCS src/platform/linux/hooks/hook_cryptodev.cpp)
+        list(APPEND HOOK_SRCS src/platform/linux/hooks/linux_hook_cryptodev.cpp)
     endif()
 
     if(JNI_FOUND)
         list(APPEND HOOK_SRCS
-            src/platform/linux/hooks/hook_jni.cpp
-            src/platform/linux/hooks/hook_java_native_crypto.cpp
+            src/platform/linux/hooks/linux_hook_jni.cpp
+            src/platform/linux/hooks/linux_hook_java_native_crypto.cpp
             src/platform/linux/utils/java_crypto_utils.cpp
         )
     endif()
@@ -133,6 +143,11 @@ if(WIN32)
 
     # Windows-specific libraries
     target_link_libraries(hook PRIVATE OpenSSL::Crypto)
+
+    if(unofficial-sodium_FOUND)
+        target_compile_definitions(hook PRIVATE HAVE_WINDOWS_LIBSODIUM)
+        target_link_libraries(hook PRIVATE unofficial-sodium::sodium)
+    endif()
 
     if(detours_FOUND)
         if(DETOURS_INCLUDE_DIR)
@@ -204,13 +219,14 @@ if(ENABLE_LIBSODIUM)
     endif()
 endif()
 
+if(UNIX)
 set(GNUTLS_FOUND OFF)
 find_path(GNUTLS_INCLUDE_DIR gnutls/crypto.h)
 find_library(GNUTLS_LIBRARY gnutls)
 if(GNUTLS_INCLUDE_DIR AND GNUTLS_LIBRARY)
     set(GNUTLS_FOUND ON)
     include_directories(${GNUTLS_INCLUDE_DIR})
-    target_sources(hook PRIVATE src/platform/linux/hooks/hook_gnutls.cpp)
+    target_sources(hook PRIVATE src/platform/linux/hooks/linux_hook_gnutls.cpp)
     add_executable(gnutls_aes_gcm_demo tests/GnuTLS/symmetric/gnutls_aes_gcm_demo.c)
     target_include_directories(gnutls_aes_gcm_demo PRIVATE ${GNUTLS_INCLUDE_DIR})
     target_link_libraries(gnutls_aes_gcm_demo PRIVATE ${GNUTLS_LIBRARY})
@@ -226,6 +242,9 @@ else()
     message(WARNING "GnuTLS headers or library not found; skipping gnutls demo build")
 endif()
 
+endif() # UNIX
+
+if(UNIX)
 set(NSS_FOUND OFF)
 find_path(NSS_INCLUDE_DIR NAMES nss.h PATH_SUFFIXES nss)
 find_path(NSPR_INCLUDE_DIR NAMES prio.h PATH_SUFFIXES nspr nspr4)
@@ -237,7 +256,7 @@ find_library(PLC4_LIBRARY plc4)
 if(NSS_INCLUDE_DIR AND NSPR_INCLUDE_DIR AND P11KIT_INCLUDE_DIR AND NSS3_LIBRARY AND NSPR4_LIBRARY AND PLDS4_LIBRARY AND PLC4_LIBRARY)
     set(NSS_FOUND ON)
     include_directories(${NSS_INCLUDE_DIR} ${NSPR_INCLUDE_DIR} ${P11KIT_INCLUDE_DIR})
-    target_sources(hook PRIVATE src/platform/linux/hooks/hook_nss.cpp)
+    target_sources(hook PRIVATE src/platform/linux/hooks/linux_hook_nss.cpp)
     add_executable(nss_aes_gcm_demo tests/NSS/symmetric/nss_aes_gcm_demo.c)
     target_include_directories(nss_aes_gcm_demo PRIVATE ${NSS_INCLUDE_DIR})
     target_link_libraries(nss_aes_gcm_demo PRIVATE ${NSS3_LIBRARY} ${NSPR4_LIBRARY} ${PLDS4_LIBRARY} ${PLC4_LIBRARY})
@@ -253,6 +272,9 @@ else()
     message(WARNING "NSS headers or libraries not found; skipping NSS demo build")
 endif()
 
+endif() # UNIX
+
+if(UNIX)
 set(MBEDTLS_FOUND OFF)
 if(ENABLE_MBEDTLS)
     find_path(MBEDTLS_INCLUDE_DIR mbedtls/gcm.h)
@@ -262,7 +284,7 @@ if(ENABLE_MBEDTLS)
     if(MBEDTLS_INCLUDE_DIR AND MBEDTLS_CRYPTO_LIBRARY)
         set(MBEDTLS_FOUND ON)
         include_directories(${MBEDTLS_INCLUDE_DIR})
-        target_sources(hook PRIVATE src/platform/linux/hooks/hook_mbedtls.cpp)
+        target_sources(hook PRIVATE src/platform/linux/hooks/linux_hook_mbedtls.cpp)
         add_executable(mbedtls_aes_gcm_demo tests/mbedTLS/symmetric/mbedtls_aes_gcm_demo.c)
         target_link_libraries(mbedtls_aes_gcm_demo PRIVATE ${MBEDTLS_CRYPTO_LIBRARY})
 
@@ -283,12 +305,15 @@ if(ENABLE_MBEDTLS)
     endif()
 endif()
 
+endif() # UNIX
+
+if(UNIX)
 set(WOLFSSL_FOUND OFF)
 find_path(WOLFSSL_INCLUDE_DIR wolfssl/wolfcrypt/aes.h)
 find_library(WOLFSSL_LIBRARY wolfssl)
 if(WOLFSSL_INCLUDE_DIR AND WOLFSSL_LIBRARY)
     set(WOLFSSL_FOUND ON)
-    target_sources(hook PRIVATE src/platform/linux/hooks/hook_wolfssl.cpp)
+    target_sources(hook PRIVATE src/platform/linux/hooks/linux_hook_wolfssl.cpp)
     target_include_directories(hook PRIVATE ${WOLFSSL_INCLUDE_DIR})
     add_executable(wolfssl_aes_gcm_demo tests/wolfSSL/symmetric/wolfssl_aes_gcm_demo.c)
     target_include_directories(wolfssl_aes_gcm_demo PRIVATE ${WOLFSSL_INCLUDE_DIR})
@@ -304,6 +329,8 @@ if(WOLFSSL_INCLUDE_DIR AND WOLFSSL_LIBRARY)
 else()
     message(WARNING "wolfSSL headers or library not found; skipping wolfssl demo build")
 endif()
+
+endif() # UNIX
 
 set(BORINGSSL_FOUND OFF)
 set(BORINGSSL_INCLUDE_HINTS)
@@ -327,10 +354,10 @@ find_path(BORINGSSL_INCLUDE_DIR openssl/is_boringssl.h
 find_library(BORINGSSL_CRYPTO_LIBRARY crypto
              PATHS ${BORINGSSL_LIB_HINTS}
              NO_DEFAULT_PATH)
-if(BORINGSSL_INCLUDE_DIR AND BORINGSSL_CRYPTO_LIBRARY)
+if(UNIX AND BORINGSSL_INCLUDE_DIR AND BORINGSSL_CRYPTO_LIBRARY)
     set(BORINGSSL_FOUND ON)
-    target_sources(hook PRIVATE src/platform/linux/hooks/hook_boringssl.cpp)
-    set_source_files_properties(src/platform/linux/hooks/hook_boringssl.cpp
+    target_sources(hook PRIVATE src/platform/linux/hooks/linux_hook_boringssl.cpp)
+    set_source_files_properties(src/platform/linux/hooks/linux_hook_boringssl.cpp
         PROPERTIES
             COMPILE_FLAGS "-I${BORINGSSL_INCLUDE_DIR}")
     add_executable(boringssl_aes_gcm_demo tests/boringSSL/symmetric/boringssl_aes_gcm_demo.cc)
@@ -348,7 +375,7 @@ if(BORINGSSL_INCLUDE_DIR AND BORINGSSL_CRYPTO_LIBRARY)
     add_executable(boringssl_xchacha20_poly1305_demo tests/boringSSL/symmetric/boringssl_xchacha20_poly1305_demo.cc)
     target_include_directories(boringssl_xchacha20_poly1305_demo PRIVATE ${BORINGSSL_INCLUDE_DIR})
     target_link_libraries(boringssl_xchacha20_poly1305_demo PRIVATE ${BORINGSSL_CRYPTO_LIBRARY})
-else()
+elseif(UNIX)
     message(WARNING "BoringSSL headers or library not found; skipping BoringSSL demo build")
 endif()
 

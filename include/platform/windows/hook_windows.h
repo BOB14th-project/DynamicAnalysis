@@ -11,6 +11,11 @@ extern "C" {
 BOOL InstallOpenSSLHooks();
 BOOL UninstallOpenSSLHooks();
 
+#ifdef HAVE_WINDOWS_LIBSODIUM
+BOOL InstallLibsodiumHooks();
+BOOL UninstallLibsodiumHooks();
+#endif
+
 // Windows-specific initialization
 BOOL InitializeWindowsHooks();
 void CleanupWindowsHooks();
