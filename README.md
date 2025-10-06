@@ -30,14 +30,14 @@ cmake --build build-linux -j
 
 ### Windows (Visual Studio Generators)
 ```cmd
-# Detours 라이브러리가 필요합니다
-cmake -S . -B build -DCMAKE_PREFIX_PATH="C:/dev/detours"
-cmake --build build
+cmake -S . -B build-windows -G "Visual Studio 17 2022" -A x64 -DCMAKE_PREFIX_PATH="C:/dev/detours;C:/vcpkg/installed/x64-windows"
+cmake --build build-windows --config Release
 ```
+Detours와 OpenSSL(VCPKG 등) 경로가 다르면 `-DCMAKE_PREFIX_PATH="C:/경로/Detours;C:/경로/OpenSSL"`을 적절히 조정해 주세요.
 
 **주요 산출물:**
 - **Linux**: `build-linux/lib/libhook.so`, `build-linux/bin/dynamic_analysis_cli`
-- **Windows**: `build/lib/hook.dll`, `build/bin/dynamic_analysis_cli.exe`
+- **Windows**: `build-windows/lib/hook.dll`, `build-windows/bin/Release/dynamic_analysis_cli.exe`
 - **공통**: 각 빌드 디렉터리의 `bin/*` OpenSSL 테스트 실행 파일들
 
 기본적으로 OpenSSL 1.1/3.0 모두 지원하며, Linux에서는 JNI가 감지되면 Java 관련 훅도 자동 활성화됩니다.

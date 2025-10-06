@@ -10,6 +10,9 @@ CLI=
 if [[ -x "$ROOT_DIR/build-linux/bin/dynamic_analysis_cli" ]]; then
   CLI="$ROOT_DIR/build-linux/bin/dynamic_analysis_cli"
   BIN_DIR="$ROOT_DIR/build-linux/bin"
+elif [[ -x "$ROOT_DIR/build-windows/bin/Release/dynamic_analysis_cli.exe" ]]; then
+  CLI="$ROOT_DIR/build-windows/bin/Release/dynamic_analysis_cli.exe"
+  BIN_DIR="$ROOT_DIR/build-windows/bin/Release"
 elif [[ -x "$ROOT_DIR/build/bin/dynamic_analysis_cli" ]]; then
   CLI="$ROOT_DIR/build/bin/dynamic_analysis_cli"
   BIN_DIR="$ROOT_DIR/build/bin"
@@ -18,7 +21,8 @@ else
   echo "Please build the project first, e.g.:" >&2
   echo "  cmake -S . -B build-linux && cmake --build build-linux -j" >&2
   echo "or" >&2
-  echo "  cmake -S . -B build && cmake --build build -j" >&2
+  echo "  cmake -S . -B build-windows -G \"Visual Studio 17 2022\" -A x64" >&2
+  echo "    cmake --build build-windows --config Release" >&2
   exit 1
 fi
 
