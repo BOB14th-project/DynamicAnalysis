@@ -11,6 +11,8 @@ ENV/
 
 # --- Build artifacts (CMake / Make)
 build-windows/
+build-linux/
+build-macos/
 build/
 cmake-build-*/
 CMakeFiles/

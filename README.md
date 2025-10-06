@@ -24,11 +24,11 @@ OpenSSL · Linux 커널 AF_ALG · JNI 기반 Java 등 다양한 암호화 실행
 
 ### Linux
 ```bash
-cmake -S . -B build
-cmake --build build -j
+cmake -S . -B build-linux
+cmake --build build-linux -j
 ```
 
-### Windows
+### Windows (Visual Studio Generators)
 ```cmd
 # Detours 라이브러리가 필요합니다
 cmake -S . -B build -DCMAKE_PREFIX_PATH="C:/dev/detours"
@@ -36,9 +36,9 @@ cmake --build build
 ```
 
 **주요 산출물:**
-- **Linux**: `build/lib/libhook.so`, `build/bin/dynamic_analysis_cli`
+- **Linux**: `build-linux/lib/libhook.so`, `build-linux/bin/dynamic_analysis_cli`
 - **Windows**: `build/lib/hook.dll`, `build/bin/dynamic_analysis_cli.exe`
-- **공통**: `build/bin/*` OpenSSL 테스트 실행 파일들
+- **공통**: 각 빌드 디렉터리의 `bin/*` OpenSSL 테스트 실행 파일들
 
 기본적으로 OpenSSL 1.1/3.0 모두 지원하며, Linux에서는 JNI가 감지되면 Java 관련 훅도 자동 활성화됩니다.
 

@@ -5,12 +5,20 @@
 set -euo pipefail
 
 ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-BIN_DIR="$ROOT_DIR/build/bin"
-CLI="$BIN_DIR/dynamic_analysis_cli"
 
-if [[ ! -x "$CLI" ]]; then
-  echo "dynamic_analysis_cli not found at $CLI" >&2
-  echo "Please build the project first: cmake -S . -B build && cmake --build build -j" >&2
+CLI=
+if [[ -x "$ROOT_DIR/build-linux/bin/dynamic_analysis_cli" ]]; then
+  CLI="$ROOT_DIR/build-linux/bin/dynamic_analysis_cli"
+  BIN_DIR="$ROOT_DIR/build-linux/bin"
+elif [[ -x "$ROOT_DIR/build/bin/dynamic_analysis_cli" ]]; then
+  CLI="$ROOT_DIR/build/bin/dynamic_analysis_cli"
+  BIN_DIR="$ROOT_DIR/build/bin"
+else
+  echo "dynamic_analysis_cli not found." >&2
+  echo "Please build the project first, e.g.:" >&2
+  echo "  cmake -S . -B build-linux && cmake --build build-linux -j" >&2
+  echo "or" >&2
+  echo "  cmake -S . -B build && cmake --build build -j" >&2
   exit 1
 fi
 
