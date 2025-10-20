@@ -8,6 +8,7 @@ OpenSSL, Linux 커널 AF_ALG, JNI 기반 Java 등 다양한 암호화 실행 경
 
 - **🐧 Linux**: `LD_PRELOAD`로 `libhook.so`를 선주입해 암호 API를 가로채고 NDJSON 로그 생성
 - **🪟 Windows**: Microsoft Detours를 사용한 DLL 인젝션으로 OpenSSL API 후킹
+- **🍎 macOS**: `DYLD_INSERT_LIBRARIES`를 통해 `libhook.dylib`을 삽입해 OpenSSL/BoringSSL/NSS/libsodium/PyCryptodome 호출을 가로채고 NDJSON 로그 생성
 - **📊 실시간 분석**: 대상 프로그램을 자동으로 주입 실행한 뒤 수집된 이벤트를 표준 출력과 로그 파일에 기록
 - **🔧 다중 라이브러리 지원**: OpenSSL, BoringSSL, libsodium, GnuTLS, NSS, mbedTLS, wolfSSL 등
 
@@ -25,6 +26,12 @@ OpenSSL, Linux 커널 AF_ALG, JNI 기반 Java 등 다양한 암호화 실행 경
 - **🪟 Windows**: `hook.dll` - Detours 기반 훅킹 라이브러리
   - OpenSSL EVP API 후킹 지원
 
+- **🍎 macOS**: `libhook.dylib` - DYLD interpose 기반 훅킹 라이브러리
+  - OpenSSL EVP/Provider/ECC 경로
+  - BoringSSL AEAD/EVP 경로
+  - Mozilla NSS PK11 계열
+  - libsodium 및 PyCryptodome AES-GCM 스트림
+
 ### CLI 도구
 - **`dynamic_analysis_cli`** : 크로스 플랫폼 분석 자동화 도구
   - **Linux**: 대상 실행 파일을 포크/exec로 실행하고 `LD_PRELOAD` 환경 자동 설정
@@ -38,10 +45,16 @@ OpenSSL, Linux 커널 AF_ALG, JNI 기반 Java 등 다양한 암호화 실행 경
 
 ## 🔨 빌드
 
-### Linux
+### Linux (AMD64 / ARM64)
 ```bash
 cmake -S . -B build-linux
 cmake --build build-linux -j
+```
+
+### macOS (Apple Silicon)
+```bash
+cmake -S . -B build-macos
+cmake --build build-macos -j
 ```
 
 ### Windows (Visual Studio)
@@ -63,8 +76,9 @@ cmake --build build-windows --config Release
 
 | 플랫폼 | 훅킹 라이브러리 | CLI 도구 | 테스트 바이너리 |
 |--------|----------------|----------|----------------|
-| **Linux** | `build-linux/lib/libhook.so` | `build-linux/bin/dynamic_analysis_cli` | `build-linux/bin/*_test` |
-| **Windows** | `build-windows/lib/hook.dll` | `build-windows/bin/Release/dynamic_analysis_cli.exe` | `build-windows/bin/Release/*_test.exe` |
+| **Linux (AMD64/ARM64)** | `build-linux/lib/libhook.so` | `build-linux/bin/dynamic_analysis_cli` | `build-linux/bin/*_test` |
+| **macOS (Apple Silicon)** | `build-macos/lib/libhook.dylib` | `build-macos/bin/dynamic_analysis_cli` | `build-macos/bin/*_test` |
+| **Windows (AMD64)** | `build-windows/lib/hook.dll` | `build-windows/bin/Release/dynamic_analysis_cli.exe` | `build-windows/bin/Release/*_test.exe` |
 
 ---
 
@@ -148,16 +162,24 @@ export HOOK_NDJSON="$PWD/logs/analysis.ndjson"
 ./build-linux/bin/dynamic_analysis_cli ./build-linux/bin/openssl_aes_lib_test
 ```
 
+#### macOS
+```bash
+# 로그 파일 경로 지정 (선택)
+export HOOK_NDJSON="$PWD/logs/analysis.ndjson"
+
+# OpenSSL AES CBC 테스트 실행
+./build-macos/bin/dynamic_analysis_cli ./build-macos/bin/openssl_aes_lib_test
+```
+
 #### Windows
 ```cmd
 # OpenSSL AES CBC 테스트 실행 (관리자 권한 필요시)
 .\build-windows\bin\Release\dynamic_analysis_cli.exe .\build-windows\bin\Release\openssl_aes_lib_test.exe
 ```
 
-#### 모든 테스트 일괄 실행 (Linux만)
-```bash
-./scripts/run_all_dynamic_tests.sh
-```
+#### 모든 테스트 일괄 실행
+- **Linux**: `./scripts/run_all_dynamic_tests.sh`
+- **macOS**: `./scripts/run_macos_dynamic_tests.sh`
 
 ---
 
@@ -320,7 +342,7 @@ cat logs/analysis.ndjson
 |--------|------|--------|
 | `HOOK_NDJSON` | 로그 파일 경로 지정 | `logs/{binary_name}_{timestamp}.ndjson` |
 | `HOOK_VERBOSE` | 상세 디버그 로그 출력 (stderr) | `0` (비활성화) |
-| `HOOK_LIBRARY_PATH` | 훅 라이브러리 경로 수동 지정 (Linux) | 자동 탐지 |
+| `HOOK_LIBRARY_PATH` | 훅 라이브러리 경로 수동 지정 (Linux/macOS) | 자동 탐지 |
 | `PYCRYPTODOME_DISABLE_DEEPBIND` | PyCryptodome RTLD_DEEPBIND 비활성화 | `0` |
 
 ---
@@ -332,17 +354,23 @@ cat logs/analysis.ndjson
 - ✅ `HOOK_VERBOSE=1`로 설정하면 stderr에 디버그 로그가 함께 출력됩니다
 - ✅ 분석 과정에서 기존 `HOOK_NDJSON` 값이 있었다면 CLI가 일시적으로 덮어쓰고 나중에 복구합니다
 
-### Linux 전용
+### Linux 전용 (AMD64 / ARM64 공통)
 - ⚠️ 정적 링크 또는 setuid 바이너리에는 LD_PRELOAD가 적용되지 않습니다
 - ⚠️ AF_ALG 샘플은 루트 실행이거나 `setcap cap_net_admin,cap_sys_admin+ep` 등 소켓 권한이 필요합니다
 - ⚠️ cryptodev 샘플은 `/dev/cryptodev` 장치가 있는 환경(모듈 로드 가능한 VM/베어메탈)에서만 실행됩니다
 - ⚠️ BoringSSL 샘플은 별도 소스 빌드가 필요하며, `BUILD_SHARED_LIBS=ON`으로 공유 라이브러리를 만든 뒤 `BORINGSSL_ROOT`를 지정해야 LD_PRELOAD 후킹이 동작합니다
 - ⚠️ OpenSSL 이외의 샘플들(libsodium, GnuTLS, NSS 등)은 기본 빌드에 포함되지 않습니다
+- ✅ **ARM64 지원**: Linux ARM64 환경에서 네이티브 컴파일 시 자동으로 동작합니다
+
+### macOS 전용 (Apple Silicon)
+- ⚠️ **DYLD_INSERT_LIBRARIES 사용**: macOS는 `LD_PRELOAD` 대신 `DYLD_INSERT_LIBRARIES` 환경변수를 사용합니다
+- ⚠️ **System Integrity Protection (SIP)**: macOS에서는 SIP이 활성화된 경우 시스템 바이너리에 대한 후킹이 제한될 수 있습니다
+- ⚠️ 정적 링크 또는 코드 서명된 바이너리에는 DYLD_INSERT_LIBRARIES가 적용되지 않을 수 있습니다
+- ✅ OpenSSL EVP 경로뿐 아니라 **BoringSSL, Mozilla NSS, libsodium, PyCryptodome**까지 동적 후킹을 지원합니다
+- ✅ **ARM64 / x86_64 유니버셜 지원**: Apple Silicon 및 Intel Mac 모두 지원됩니다
 
 ### Windows 전용
 - ⚠️ **현재 OpenSSL만 지원**: Detours 기반으로 OpenSSL EVP 경로를 후킹합니다. 기타 라이브러리는 추후 확장 예정입니다
 - ⚠️ **관리자 권한**: DLL 인젝션 시 관리자 권한이 필요할 수 있습니다
 - ⚠️ **Detours 의존성**: Microsoft Detours 라이브러리가 반드시 필요합니다
 - ⚠️ **동적 링크 필요**: 정적 링크된 OpenSSL을 사용하는 프로그램은 후킹되지 않습니다
-
-

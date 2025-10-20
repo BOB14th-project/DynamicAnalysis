@@ -187,4 +187,11 @@ void init_java_native_crypto_hooks(void) {
     hook_java_crypto_symbols();
 }
 
+#ifdef __GNUC__
+__attribute__((constructor))
+static void java_native_crypto_ctor(void) {
+    init_java_native_crypto_hooks();
+}
+#endif
+
 #endif // JAVA_SUPPORT_ENABLED

@@ -23,6 +23,7 @@ include_directories(
     ${CMAKE_SOURCE_DIR}/include/platform
     ${CMAKE_SOURCE_DIR}/include/platform/linux
     ${CMAKE_SOURCE_DIR}/include/platform/windows
+    ${CMAKE_SOURCE_DIR}/include/platform/mac
 )
 
 # OpenSSL 필요 (openssl 훅/테스트)
@@ -33,12 +34,19 @@ option(ENABLE_AF_ALG      "Build AF_ALG hook (Linux kernel crypto sockets)" ON)
 option(ENABLE_CRYPTODEV   "Build cryptodev hook (ioctl-based)"              OFF)
 option(ENABLE_LIBSODIUM   "Build libsodium hooks"                           ON)
 option(ENABLE_MBEDTLS     "Build mbedTLS demos"                             ON)
+option(ENABLE_WOLFSSL     "Build wolfSSL demos"                             ON)
+option(ENABLE_GNUTLS      "Build GnuTLS hooks"                              ON)
+option(ENABLE_NSS         "Build NSS hooks"                                 ON)
 option(HOOK_VERBOSE       "Verbose logging inside hooks"                    OFF)
 option(HOOK_MASK          "Mask key/iv/tag in NDJSON (hash/trunc)"          OFF)
 
 if(MSVC)
     add_compile_options(/utf-8)
     add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
+endif()
+
+if(APPLE)
+    add_link_options(-Wl,-flat_namespace)
 endif()
 
 if(HOOK_VERBOSE)
@@ -84,6 +92,22 @@ if(WIN32)
             message(STATUS "Found Detours: ${DETOURS_INCLUDE_DIR}")
         endif()
     endif()
+elseif(APPLE)
+    set(HOOK_SRCS
+        src/platform/mac/core/init.cpp
+        src/platform/mac/core/log.cpp
+        src/platform/mac/core/resolver.cpp
+        src/platform/mac/utils/mac_output.cpp
+        src/platform/mac/utils/mac_crypto_utils.cpp
+        src/platform/mac/hooks/mac_hook_openssl_core.cpp
+        src/platform/mac/hooks/mac_hook_openssl_provider.cpp
+        src/platform/mac/hooks/mac_hook_openssl_ecc.cpp
+        src/platform/mac/hooks/mac_hook_openssl_state.cpp
+        src/platform/mac/hooks/mac_hook_libsodium.cpp
+        src/platform/mac/hooks/mac_hook_mbedtls.cpp
+        src/platform/mac/hooks/mac_hook_wolfssl.cpp
+        src/platform/mac/hooks/mac_hook_pycryptodome.cpp
+    )
 elseif(UNIX)
     set(HOOK_SRCS
         src/platform/linux/core/init.cpp
@@ -146,6 +170,11 @@ if(WIN32)
     else()
         message(FATAL_ERROR "Detours library is required for Windows builds but was not found")
     endif()
+elseif(APPLE)
+    # macOS-specific compile options
+    target_compile_options(hook PRIVATE -O2 -fPIC -fno-omit-frame-pointer -Wall -Wextra)
+    target_link_libraries(hook PRIVATE dl pthread OpenSSL::Crypto)
+    target_link_options(hook PRIVATE -undefined dynamic_lookup)
 else()
     # Linux-specific compile options
     target_compile_options(hook PRIVATE -O2 -fPIC -fno-omit-frame-pointer -Wall -Wextra)
@@ -204,62 +233,104 @@ if(ENABLE_LIBSODIUM)
     endif()
 endif()
 
-if(UNIX)
 set(GNUTLS_FOUND OFF)
-find_path(GNUTLS_INCLUDE_DIR gnutls/crypto.h)
-find_library(GNUTLS_LIBRARY gnutls)
-if(GNUTLS_INCLUDE_DIR AND GNUTLS_LIBRARY)
-    set(GNUTLS_FOUND ON)
-    include_directories(${GNUTLS_INCLUDE_DIR})
-    target_sources(hook PRIVATE src/platform/linux/hooks/linux_hook_gnutls.cpp)
-    add_executable(gnutls_aes_gcm_demo tests/GnuTLS/symmetric/gnutls_aes_gcm_demo.c)
-    target_include_directories(gnutls_aes_gcm_demo PRIVATE ${GNUTLS_INCLUDE_DIR})
-    target_link_libraries(gnutls_aes_gcm_demo PRIVATE ${GNUTLS_LIBRARY})
+if(ENABLE_GNUTLS)
+    find_path(GNUTLS_INCLUDE_DIR gnutls/crypto.h)
+    find_library(GNUTLS_LIBRARY gnutls)
+    if(GNUTLS_INCLUDE_DIR AND GNUTLS_LIBRARY)
+        set(GNUTLS_FOUND ON)
+        if(APPLE)
+            target_include_directories(hook PRIVATE ${GNUTLS_INCLUDE_DIR})
+            target_sources(hook PRIVATE src/platform/mac/hooks/mac_hook_gnutls.cpp)
+        elseif(UNIX)
+            include_directories(${GNUTLS_INCLUDE_DIR})
+            target_sources(hook PRIVATE src/platform/linux/hooks/linux_hook_gnutls.cpp)
+        endif()
 
-    add_executable(gnutls_aes_gcm_roundtrip_demo tests/GnuTLS/symmetric/gnutls_aes_gcm_roundtrip_demo.c)
-    target_include_directories(gnutls_aes_gcm_roundtrip_demo PRIVATE ${GNUTLS_INCLUDE_DIR})
-    target_link_libraries(gnutls_aes_gcm_roundtrip_demo PRIVATE ${GNUTLS_LIBRARY})
+        add_executable(gnutls_aes_gcm_demo tests/GnuTLS/symmetric/gnutls_aes_gcm_demo.c)
+        target_include_directories(gnutls_aes_gcm_demo PRIVATE ${GNUTLS_INCLUDE_DIR})
+        target_link_libraries(gnutls_aes_gcm_demo PRIVATE ${GNUTLS_LIBRARY})
 
-    add_executable(gnutls_aes_cbc_demo tests/GnuTLS/symmetric/gnutls_aes_cbc_demo.c)
-    target_include_directories(gnutls_aes_cbc_demo PRIVATE ${GNUTLS_INCLUDE_DIR})
-    target_link_libraries(gnutls_aes_cbc_demo PRIVATE ${GNUTLS_LIBRARY})
-else()
-    message(WARNING "GnuTLS headers or library not found; skipping gnutls demo build")
+        add_executable(gnutls_aes_gcm_roundtrip_demo tests/GnuTLS/symmetric/gnutls_aes_gcm_roundtrip_demo.c)
+        target_include_directories(gnutls_aes_gcm_roundtrip_demo PRIVATE ${GNUTLS_INCLUDE_DIR})
+        target_link_libraries(gnutls_aes_gcm_roundtrip_demo PRIVATE ${GNUTLS_LIBRARY})
+
+        add_executable(gnutls_aes_cbc_demo tests/GnuTLS/symmetric/gnutls_aes_cbc_demo.c)
+        target_include_directories(gnutls_aes_cbc_demo PRIVATE ${GNUTLS_INCLUDE_DIR})
+        target_link_libraries(gnutls_aes_cbc_demo PRIVATE ${GNUTLS_LIBRARY})
+    else()
+        message(WARNING "GnuTLS headers or library not found; skipping gnutls demo build")
+    endif()
 endif()
 
-endif() # UNIX
-
-if(UNIX)
 set(NSS_FOUND OFF)
-find_path(NSS_INCLUDE_DIR NAMES nss.h PATH_SUFFIXES nss)
-find_path(NSPR_INCLUDE_DIR NAMES prio.h PATH_SUFFIXES nspr nspr4)
-find_path(P11KIT_INCLUDE_DIR NAMES p11-kit/pkcs11.h PATH_SUFFIXES p11-kit p11-kit-1)
-find_library(NSS3_LIBRARY nss3)
-find_library(NSPR4_LIBRARY nspr4)
-find_library(PLDS4_LIBRARY plds4)
-find_library(PLC4_LIBRARY plc4)
-if(NSS_INCLUDE_DIR AND NSPR_INCLUDE_DIR AND P11KIT_INCLUDE_DIR AND NSS3_LIBRARY AND NSPR4_LIBRARY AND PLDS4_LIBRARY AND PLC4_LIBRARY)
-    set(NSS_FOUND ON)
-    include_directories(${NSS_INCLUDE_DIR} ${NSPR_INCLUDE_DIR} ${P11KIT_INCLUDE_DIR})
-    target_sources(hook PRIVATE src/platform/linux/hooks/linux_hook_nss.cpp)
-    add_executable(nss_aes_gcm_demo tests/NSS/symmetric/nss_aes_gcm_demo.c)
-    target_include_directories(nss_aes_gcm_demo PRIVATE ${NSS_INCLUDE_DIR})
-    target_link_libraries(nss_aes_gcm_demo PRIVATE ${NSS3_LIBRARY} ${NSPR4_LIBRARY} ${PLDS4_LIBRARY} ${PLC4_LIBRARY})
+if(ENABLE_NSS)
+    if(EXISTS "/opt/homebrew/opt/nss/include/nss/nss.h")
+        set(NSS_INCLUDE_DIR "/opt/homebrew/opt/nss/include" CACHE PATH "NSS include directory" FORCE)
+    endif()
+    if(EXISTS "/opt/homebrew/opt/nspr/include/nspr/prio.h")
+        set(NSPR_INCLUDE_DIR "/opt/homebrew/opt/nspr/include" CACHE PATH "NSPR include directory" FORCE)
+    endif()
+    if(EXISTS "/opt/homebrew/opt/p11-kit/include/p11-kit/pkcs11.h")
+        set(P11KIT_INCLUDE_DIR "/opt/homebrew/opt/p11-kit/include" CACHE PATH "p11-kit include directory" FORCE)
+    endif()
 
-    add_executable(nss_aes_gcm_roundtrip_demo tests/NSS/symmetric/nss_aes_gcm_roundtrip_demo.c)
-    target_include_directories(nss_aes_gcm_roundtrip_demo PRIVATE ${NSS_INCLUDE_DIR})
-    target_link_libraries(nss_aes_gcm_roundtrip_demo PRIVATE ${NSS3_LIBRARY} ${NSPR4_LIBRARY} ${PLDS4_LIBRARY} ${PLC4_LIBRARY})
+    if(NOT EXISTS "${NSS_INCLUDE_DIR}/nss/nss.h")
+        find_path(NSS_INCLUDE_DIR nss/nss.h
+                  PATHS /usr/local/opt/nss/include
+                  NO_DEFAULT_PATH)
+    endif()
+    if(NOT EXISTS "${NSS_INCLUDE_DIR}/nss/nss.h")
+        find_path(NSS_INCLUDE_DIR nss/nss.h)
+    endif()
 
-    add_executable(nss_aes_cbc_demo tests/NSS/symmetric/nss_aes_cbc_demo.c)
-    target_include_directories(nss_aes_cbc_demo PRIVATE ${NSS_INCLUDE_DIR})
-    target_link_libraries(nss_aes_cbc_demo PRIVATE ${NSS3_LIBRARY} ${NSPR4_LIBRARY} ${PLDS4_LIBRARY} ${PLC4_LIBRARY})
-else()
-    message(WARNING "NSS headers or libraries not found; skipping NSS demo build")
+    if(NOT EXISTS "${NSPR_INCLUDE_DIR}/nspr/prio.h")
+        find_path(NSPR_INCLUDE_DIR nspr/prio.h
+                  PATHS /usr/local/opt/nspr/include
+                  NO_DEFAULT_PATH)
+    endif()
+    if(NOT EXISTS "${NSPR_INCLUDE_DIR}/nspr/prio.h")
+        find_path(NSPR_INCLUDE_DIR nspr/prio.h)
+    endif()
+
+    if(NOT EXISTS "${P11KIT_INCLUDE_DIR}/p11-kit/pkcs11.h")
+        find_path(P11KIT_INCLUDE_DIR p11-kit/pkcs11.h
+                  PATHS /usr/local/opt/p11-kit/include
+                  NO_DEFAULT_PATH)
+    endif()
+    if(NOT EXISTS "${P11KIT_INCLUDE_DIR}/p11-kit/pkcs11.h")
+        find_path(P11KIT_INCLUDE_DIR p11-kit/pkcs11.h)
+    endif()
+    find_library(NSS3_LIBRARY nss3 PATHS /opt/homebrew/lib /usr/local/lib)
+    find_library(NSPR4_LIBRARY nspr4 PATHS /opt/homebrew/lib /usr/local/lib)
+    find_library(PLDS4_LIBRARY plds4 PATHS /opt/homebrew/lib /usr/local/lib)
+    find_library(PLC4_LIBRARY plc4 PATHS /opt/homebrew/lib /usr/local/lib)
+    if(NSS_INCLUDE_DIR AND NSPR_INCLUDE_DIR AND P11KIT_INCLUDE_DIR AND NSS3_LIBRARY AND NSPR4_LIBRARY AND PLDS4_LIBRARY AND PLC4_LIBRARY)
+        set(NSS_FOUND ON)
+        if(APPLE)
+            target_sources(hook PRIVATE src/platform/mac/hooks/mac_hook_nss.cpp)
+            target_include_directories(hook PRIVATE ${NSS_INCLUDE_DIR} ${NSPR_INCLUDE_DIR} ${NSPR_INCLUDE_DIR}/nspr ${P11KIT_INCLUDE_DIR})
+        elseif(UNIX)
+            include_directories(${NSS_INCLUDE_DIR} ${NSPR_INCLUDE_DIR} ${P11KIT_INCLUDE_DIR})
+            target_sources(hook PRIVATE src/platform/linux/hooks/linux_hook_nss.cpp)
+        endif()
+
+        add_executable(nss_aes_gcm_demo tests/NSS/symmetric/nss_aes_gcm_demo.c)
+        target_include_directories(nss_aes_gcm_demo PRIVATE ${NSS_INCLUDE_DIR} ${NSPR_INCLUDE_DIR} ${NSPR_INCLUDE_DIR}/nspr)
+        target_link_libraries(nss_aes_gcm_demo PRIVATE ${NSS3_LIBRARY} ${NSPR4_LIBRARY} ${PLDS4_LIBRARY} ${PLC4_LIBRARY})
+
+        add_executable(nss_aes_gcm_roundtrip_demo tests/NSS/symmetric/nss_aes_gcm_roundtrip_demo.c)
+        target_include_directories(nss_aes_gcm_roundtrip_demo PRIVATE ${NSS_INCLUDE_DIR} ${NSPR_INCLUDE_DIR} ${NSPR_INCLUDE_DIR}/nspr)
+        target_link_libraries(nss_aes_gcm_roundtrip_demo PRIVATE ${NSS3_LIBRARY} ${NSPR4_LIBRARY} ${PLDS4_LIBRARY} ${PLC4_LIBRARY})
+
+        add_executable(nss_aes_cbc_demo tests/NSS/symmetric/nss_aes_cbc_demo.c)
+        target_include_directories(nss_aes_cbc_demo PRIVATE ${NSS_INCLUDE_DIR} ${NSPR_INCLUDE_DIR} ${NSPR_INCLUDE_DIR}/nspr)
+        target_link_libraries(nss_aes_cbc_demo PRIVATE ${NSS3_LIBRARY} ${NSPR4_LIBRARY} ${PLDS4_LIBRARY} ${PLC4_LIBRARY})
+    else()
+        message(WARNING "NSS headers or libraries not found; skipping NSS demo build")
+    endif()
 endif()
 
-endif() # UNIX
-
-if(UNIX)
 set(MBEDTLS_FOUND OFF)
 if(ENABLE_MBEDTLS)
     find_path(MBEDTLS_INCLUDE_DIR mbedtls/gcm.h)
@@ -268,54 +339,69 @@ if(ENABLE_MBEDTLS)
     find_library(MBEDTLS_X509_LIBRARY mbedx509)
     if(MBEDTLS_INCLUDE_DIR AND MBEDTLS_CRYPTO_LIBRARY)
         set(MBEDTLS_FOUND ON)
-        include_directories(${MBEDTLS_INCLUDE_DIR})
-        target_sources(hook PRIVATE src/platform/linux/hooks/linux_hook_mbedtls.cpp)
+        if(APPLE)
+            target_include_directories(hook PRIVATE ${MBEDTLS_INCLUDE_DIR})
+        elseif(UNIX)
+            include_directories(${MBEDTLS_INCLUDE_DIR})
+            target_sources(hook PRIVATE src/platform/linux/hooks/linux_hook_mbedtls.cpp)
+        endif()
+
         add_executable(mbedtls_aes_gcm_demo tests/mbedTLS/symmetric/mbedtls_aes_gcm_demo.c)
+        target_include_directories(mbedtls_aes_gcm_demo PRIVATE ${MBEDTLS_INCLUDE_DIR})
         target_link_libraries(mbedtls_aes_gcm_demo PRIVATE ${MBEDTLS_CRYPTO_LIBRARY})
 
         add_executable(mbedtls_hmac_sha256_demo tests/mbedTLS/hash/mbedtls_hmac_sha256_demo.c)
+        target_include_directories(mbedtls_hmac_sha256_demo PRIVATE ${MBEDTLS_INCLUDE_DIR})
         target_link_libraries(mbedtls_hmac_sha256_demo PRIVATE ${MBEDTLS_CRYPTO_LIBRARY})
 
-        if(MBEDTLS_TLS_LIBRARY AND MBEDTLS_X509_LIBRARY)
+        if(MBEDTLS_TLS_LIBRARY AND MBEDTLS_X509_LIBRARY AND NOT APPLE)
             add_executable(mbedtls_ecdsa_demo tests/mbedTLS/pk/mbedtls_ecdsa_demo.c)
+            target_include_directories(mbedtls_ecdsa_demo PRIVATE ${MBEDTLS_INCLUDE_DIR})
             target_link_libraries(mbedtls_ecdsa_demo PRIVATE ${MBEDTLS_CRYPTO_LIBRARY} ${MBEDTLS_X509_LIBRARY} ${MBEDTLS_TLS_LIBRARY})
 
             add_executable(mbedtls_rsa_demo tests/mbedTLS/pk/mbedtls_rsa_demo.c)
+            target_include_directories(mbedtls_rsa_demo PRIVATE ${MBEDTLS_INCLUDE_DIR})
             target_link_libraries(mbedtls_rsa_demo PRIVATE ${MBEDTLS_CRYPTO_LIBRARY} ${MBEDTLS_X509_LIBRARY} ${MBEDTLS_TLS_LIBRARY})
         else()
-            message(WARNING "mbedtls tls/x509 libraries not found; skipping pk demos")
+            if(NOT APPLE)
+                message(WARNING "mbedtls tls/x509 libraries not found; skipping pk demos")
+            else()
+                message(STATUS "Skipping mbedTLS PK demos on macOS (API mismatch)")
+            endif()
         endif()
     else()
         message(WARNING "mbedTLS headers or library not found; skipping mbedtls demos")
     endif()
 endif()
 
-endif() # UNIX
-
-if(UNIX)
 set(WOLFSSL_FOUND OFF)
-find_path(WOLFSSL_INCLUDE_DIR wolfssl/wolfcrypt/aes.h)
-find_library(WOLFSSL_LIBRARY wolfssl)
-if(WOLFSSL_INCLUDE_DIR AND WOLFSSL_LIBRARY)
-    set(WOLFSSL_FOUND ON)
-    target_sources(hook PRIVATE src/platform/linux/hooks/linux_hook_wolfssl.cpp)
-    target_include_directories(hook PRIVATE ${WOLFSSL_INCLUDE_DIR})
-    add_executable(wolfssl_aes_gcm_demo tests/wolfSSL/symmetric/wolfssl_aes_gcm_demo.c)
-    target_include_directories(wolfssl_aes_gcm_demo PRIVATE ${WOLFSSL_INCLUDE_DIR})
-    target_link_libraries(wolfssl_aes_gcm_demo PRIVATE ${WOLFSSL_LIBRARY})
+if(ENABLE_WOLFSSL)
+    find_path(WOLFSSL_INCLUDE_DIR wolfssl/wolfcrypt/aes.h)
+    find_library(WOLFSSL_LIBRARY wolfssl)
+    if(WOLFSSL_INCLUDE_DIR AND WOLFSSL_LIBRARY)
+        set(WOLFSSL_FOUND ON)
+        if(APPLE)
+            target_include_directories(hook PRIVATE ${WOLFSSL_INCLUDE_DIR})
+        elseif(UNIX)
+            target_sources(hook PRIVATE src/platform/linux/hooks/linux_hook_wolfssl.cpp)
+            target_include_directories(hook PRIVATE ${WOLFSSL_INCLUDE_DIR})
+        endif()
 
-    add_executable(wolfssl_aes_cbc_demo tests/wolfSSL/symmetric/wolfssl_aes_cbc_demo.c)
-    target_include_directories(wolfssl_aes_cbc_demo PRIVATE ${WOLFSSL_INCLUDE_DIR})
-    target_link_libraries(wolfssl_aes_cbc_demo PRIVATE ${WOLFSSL_LIBRARY})
+        add_executable(wolfssl_aes_gcm_demo tests/wolfSSL/symmetric/wolfssl_aes_gcm_demo.c)
+        target_include_directories(wolfssl_aes_gcm_demo PRIVATE ${WOLFSSL_INCLUDE_DIR})
+        target_link_libraries(wolfssl_aes_gcm_demo PRIVATE ${WOLFSSL_LIBRARY})
 
-    add_executable(wolfssl_hmac_sha256_demo tests/wolfSSL/hash/wolfssl_hmac_sha256_demo.c)
-    target_include_directories(wolfssl_hmac_sha256_demo PRIVATE ${WOLFSSL_INCLUDE_DIR})
-    target_link_libraries(wolfssl_hmac_sha256_demo PRIVATE ${WOLFSSL_LIBRARY})
-else()
-    message(WARNING "wolfSSL headers or library not found; skipping wolfssl demo build")
+        add_executable(wolfssl_aes_cbc_demo tests/wolfSSL/symmetric/wolfssl_aes_cbc_demo.c)
+        target_include_directories(wolfssl_aes_cbc_demo PRIVATE ${WOLFSSL_INCLUDE_DIR})
+        target_link_libraries(wolfssl_aes_cbc_demo PRIVATE ${WOLFSSL_LIBRARY})
+
+        add_executable(wolfssl_hmac_sha256_demo tests/wolfSSL/hash/wolfssl_hmac_sha256_demo.c)
+        target_include_directories(wolfssl_hmac_sha256_demo PRIVATE ${WOLFSSL_INCLUDE_DIR})
+        target_link_libraries(wolfssl_hmac_sha256_demo PRIVATE ${WOLFSSL_LIBRARY})
+    else()
+        message(WARNING "wolfSSL headers or library not found; skipping wolfssl demo build")
+    endif()
 endif()
-
-endif() # UNIX
 
 set(BORINGSSL_FOUND OFF)
 set(BORINGSSL_INCLUDE_HINTS)
@@ -335,16 +421,24 @@ endif()
 
 find_path(BORINGSSL_INCLUDE_DIR openssl/is_boringssl.h
           PATHS ${BORINGSSL_INCLUDE_HINTS}
-          NO_DEFAULT_PATH)
-find_library(BORINGSSL_CRYPTO_LIBRARY crypto
+          /opt/homebrew/include
+          /usr/local/include)
+find_library(BORINGSSL_CRYPTO_LIBRARY NAMES crypto boringssl
              PATHS ${BORINGSSL_LIB_HINTS}
-             NO_DEFAULT_PATH)
-if(UNIX AND BORINGSSL_INCLUDE_DIR AND BORINGSSL_CRYPTO_LIBRARY)
+             /opt/homebrew/lib
+             /usr/local/lib)
+if(BORINGSSL_INCLUDE_DIR AND BORINGSSL_CRYPTO_LIBRARY)
     set(BORINGSSL_FOUND ON)
-    target_sources(hook PRIVATE src/platform/linux/hooks/linux_hook_boringssl.cpp)
-    set_source_files_properties(src/platform/linux/hooks/linux_hook_boringssl.cpp
-        PROPERTIES
-            COMPILE_FLAGS "-I${BORINGSSL_INCLUDE_DIR}")
+    if(APPLE)
+        target_sources(hook PRIVATE src/platform/mac/hooks/mac_hook_boringssl.cpp)
+        target_include_directories(hook PRIVATE ${BORINGSSL_INCLUDE_DIR})
+    elseif(UNIX)
+        target_sources(hook PRIVATE src/platform/linux/hooks/linux_hook_boringssl.cpp)
+        set_source_files_properties(src/platform/linux/hooks/linux_hook_boringssl.cpp
+            PROPERTIES
+                COMPILE_FLAGS "-I${BORINGSSL_INCLUDE_DIR}")
+    endif()
+
     add_executable(boringssl_aes_gcm_demo tests/boringSSL/symmetric/boringssl_aes_gcm_demo.cc)
     target_include_directories(boringssl_aes_gcm_demo PRIVATE ${BORINGSSL_INCLUDE_DIR})
     target_link_libraries(boringssl_aes_gcm_demo PRIVATE ${BORINGSSL_CRYPTO_LIBRARY})
@@ -360,7 +454,7 @@ if(UNIX AND BORINGSSL_INCLUDE_DIR AND BORINGSSL_CRYPTO_LIBRARY)
     add_executable(boringssl_xchacha20_poly1305_demo tests/boringSSL/symmetric/boringssl_xchacha20_poly1305_demo.cc)
     target_include_directories(boringssl_xchacha20_poly1305_demo PRIVATE ${BORINGSSL_INCLUDE_DIR})
     target_link_libraries(boringssl_xchacha20_poly1305_demo PRIVATE ${BORINGSSL_CRYPTO_LIBRARY})
-elseif(UNIX)
+else()
     message(WARNING "BoringSSL headers or library not found; skipping BoringSSL demo build")
 endif()
 
@@ -405,8 +499,8 @@ if(WIN32 AND DETOURS_INCLUDE_DIR)
     endif()
 endif()
 
-# Java 지원이 가능한 경우 Java 테스트 추가
-if(JNI_FOUND)
+# Java 지원이 가능한 경우 Java 테스트 추가 (Linux만)
+if(JNI_FOUND AND UNIX AND NOT APPLE)
     add_executable(java_process_detector tests/java/linux/java_process_detector.cpp)
     target_link_libraries(java_process_detector PRIVATE dl)
 endif()
@@ -420,7 +514,7 @@ set(TEST_TARGETS
     openssl_provider_ex2_test
     openssl_provider_ex2_params_test
     dynamic_analysis_cli)
-if(JNI_FOUND)
+if(JNI_FOUND AND UNIX AND NOT APPLE)
     list(APPEND TEST_TARGETS java_process_detector)
 endif()
 if(LIBSODIUM_FOUND)
@@ -437,7 +531,7 @@ if(UNIX AND GNUTLS_FOUND)
         gnutls_aes_gcm_roundtrip_demo
         gnutls_aes_cbc_demo)
 endif()
-if(UNIX AND NSS_FOUND)
+if(UNIX AND NOT APPLE AND NSS_FOUND)
     list(APPEND TEST_TARGETS
         nss_aes_gcm_demo
         nss_aes_gcm_roundtrip_demo
@@ -453,6 +547,12 @@ if(UNIX AND MBEDTLS_FOUND)
     if(TARGET mbedtls_rsa_demo)
         list(APPEND TEST_TARGETS mbedtls_rsa_demo)
     endif()
+endif()
+if(UNIX AND WOLFSSL_FOUND)
+    list(APPEND TEST_TARGETS
+        wolfssl_aes_gcm_demo
+        wolfssl_aes_cbc_demo
+        wolfssl_hmac_sha256_demo)
 endif()
 if(UNIX AND BORINGSSL_FOUND)
     list(APPEND TEST_TARGETS
@@ -491,6 +591,9 @@ foreach(tgt IN LISTS TEST_TARGETS)
      NOT tgt STREQUAL "mbedtls_hmac_sha256_demo" AND
      NOT tgt STREQUAL "mbedtls_ecdsa_demo" AND
      NOT tgt STREQUAL "mbedtls_rsa_demo" AND
+     NOT tgt STREQUAL "wolfssl_aes_gcm_demo" AND
+     NOT tgt STREQUAL "wolfssl_aes_cbc_demo" AND
+     NOT tgt STREQUAL "wolfssl_hmac_sha256_demo" AND
      NOT tgt STREQUAL "af_alg_skcipher_aes_cbc_demo" AND
      NOT tgt STREQUAL "af_alg_aes_gcm_demo" AND
      NOT tgt STREQUAL "af_alg_hmac_sha256_demo" AND
